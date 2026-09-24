@@ -1,0 +1,50 @@
+{
+	"geode": "5.10.1",
+	"gd": {
+		"win": "2.2081",
+		"android": "2.2081",
+		"mac": "2.2081",
+		"ios": "2.2081"
+	},
+	"id": "shahar.session-stats",
+	"name": "Session Stats",
+	"version": "v1.0.0",
+	"developer": "shahar",
+	"description": "Live attempts, best run and play time for your current session, plus a run history in the pause menu",
+	"tags": ["gameplay", "utility"],
+	"dependencies": {
+		"geode.node-ids": ">=1.20.0"
+	},
+	"settings": {
+		"show-hud": {
+			"type": "bool",
+			"name": "Show HUD",
+			"description": "Show session stats in the corner while playing.",
+			"default": true
+		},
+		"hud-corner": {
+			"type": "string",
+			"name": "HUD Corner",
+			"description": "Which corner of the screen the HUD sits in.",
+			"default": "Top Left",
+			"one-of": ["Top Left", "Top Right", "Bottom Left", "Bottom Right"]
+		},
+		"hud-opacity": {
+			"type": "int",
+			"name": "HUD Opacity",
+			"description": "How opaque the HUD text is (0 to 255).",
+			"default": 150,
+			"min": 20,
+			"max": 255,
+			"control": {
+				"slider": true
+			}
+		},
+		"count-restarts": {
+			"type": "bool",
+			"name": "Count Restarts",
+			"description": "Count restarting from the pause menu as an attempt, like GD does.",
+			"default": true
+		}
+	}
+}
