@@ -23,17 +23,29 @@ Top matches (6 of 6):
 
 ## Easiest way: the app
 
-1. Install Python 3 from [python.org](https://python.org) (on Windows, tick "Add Python to PATH").
-2. Download this folder (GitHub: **Code → Download ZIP**, then unzip).
-3. Double-click the starter for your computer:
-   - Mac: `Start Image Sleuth (Mac).command` (first time: right-click → Open)
-   - Windows: `Start Image Sleuth (Windows).bat`
-   - Linux: `Start Image Sleuth (Linux).sh`
-4. Your browser opens. Tap **choose a photo** (or paste an image link) and press **Search**.
+Works on a Mac, Windows or Linux computer (not on a phone directly; see the end of this section).
 
-Results show as cards with a confidence score; tap one to open the page.
-To use it from your phone on the same Wi-Fi, run `imgsleuth-app --lan` and open
-`http://<your-computer's-IP>:8765` on the phone.
+1. Install Python 3.10+ from [python.org/downloads](https://www.python.org/downloads/).
+   On Windows, tick **"Add python.exe to PATH"** on the first installer screen.
+2. On GitHub, pick this branch, then **Code → Download ZIP**, and unzip it.
+3. Open the `image-sleuth` folder and double-click the starter for your computer:
+   - **Windows:** `Start Image Sleuth (Windows).bat`. If a blue "Windows protected your PC" box appears, click **More info → Run anyway**.
+   - **Mac:** `Start Image Sleuth (Mac).command`. If macOS says it can't be opened, right-click it → **Open** → **Open**.
+     On newer macOS: System Settings → Privacy & Security → scroll down → **Open Anyway**.
+   - **Linux:** run `./"Start Image Sleuth (Linux).sh"` in a terminal.
+4. A window opens. The first time it sets things up (about a minute, needs internet), then your browser opens the app.
+   Keep that window open while you use it.
+
+If the browser doesn't open by itself, go to **http://localhost:8765** yourself.
+If something fails, the window stays open and shows the reason.
+
+If double-clicking still doesn't work, open Terminal (Mac) or PowerShell (Windows) in the `image-sleuth` folder and run:
+
+- Mac/Linux: `python3 -m venv .venv && .venv/bin/pip install -r requirements.txt && .venv/bin/python -m imgsleuth --web`
+- Windows: `py -m venv .venv; .venv\Scripts\pip install -r requirements.txt; .venv\Scripts\python -m imgsleuth --web`
+
+**From your phone:** start it on your computer with `.venv/bin/python -m imgsleuth.web --lan`, then open
+`http://<your computer's IP>:8765` on a phone connected to the same Wi-Fi.
 
 ## Install (command line)
 

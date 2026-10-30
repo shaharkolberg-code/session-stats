@@ -148,6 +148,15 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
 
+def _is_running(port: int) -> bool:
+    import urllib.request
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=2) as r:
+            return b"Image Sleuth" in r.read(4000)
+    except OSError:
+        return False
+
+
 def serve(port: int = 8765, host: str = "127.0.0.1", open_browser: bool = True, base_args=None) -> None:
     from .cli import parse_args, pick_engines, search_one
 
@@ -162,7 +171,20 @@ def serve(port: int = 8765, host: str = "127.0.0.1", open_browser: bool = True, 
         args.top = 0
         return search_one(target, args, pick_engines(args))
 
-    server = ThreadingHTTPServer((host, port), Handler)
+    server = None
+    for p in range(port, port + 20):
+        try:
+            server = ThreadingHTTPServer((host, p), Handler)
+            port = p
+            break
+        except OSError:
+            if _is_running(p):  # already open from an earlier double-click
+                print(f"Image Sleuth is already running - opening http://localhost:{p}/")
+                if open_browser:
+                    webbrowser.open(f"http://localhost:{p}/")
+                return
+    if server is None:
+        raise SystemExit(f"No free port between {port} and {port + 19}.")
     server.search = search
     url = f"http://{'localhost' if host in ('127.0.0.1', '0.0.0.0') else host}:{port}/"
     print(f"Image Sleuth is running at {url}  (press Ctrl+C to stop)")
@@ -185,3 +207,7 @@ def main() -> None:
     a = p.parse_args()
     serve(a.port, "0.0.0.0" if a.lan else "127.0.0.1", not a.no_browser)
 
+
+
+if __name__ == "__main__":
+    main()
