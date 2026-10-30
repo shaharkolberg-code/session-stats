@@ -50,12 +50,13 @@ def test_parse_saucenao():
 
 def test_parse_yandex():
     state = {"cbir": {"sites": [
-        {"title": "A page", "url": "https://site.example/p",
+        {"title": "A page", "url": "https://site.example/p?id=1&utm_source=yandex",
          "originalImage": {"url": "https://site.example/full.jpg", "width": 1000, "height": 700},
          "thumb": {"url": "//avatars.mds.yandex.net/t"}},
-        {"title": "dup", "url": "https://site.example/p"}]}}
+        {"title": "dup", "url": "https://site.example/p?id=1"}]}}
     html = f"<div data-state='{json.dumps(state)}'></div><div data-state='not json'></div>"
     [m] = parse_yandex(html)
+    assert m.page_url == "https://site.example/p?id=1"
     assert m.image_url == "https://site.example/full.jpg" and m.width == 1000
     assert m.thumb_url == "https://avatars.mds.yandex.net/t"
 

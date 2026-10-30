@@ -15,7 +15,7 @@ import os
 import re
 from dataclasses import dataclass, field
 from typing import Callable
-from urllib.parse import quote, urljoin
+from urllib.parse import parse_qsl, quote, urlencode, urljoin, urlsplit, urlunsplit
 
 import requests
 from bs4 import BeautifulSoup
@@ -73,6 +73,13 @@ def _session(proxy: str | None = None) -> requests.Session:
     return s
 
 
+def strip_tracking(url: str) -> str:
+    """Drop utm_* tags so links are clean and the same page merges across engines."""
+    parts = urlsplit(url)
+    query = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True) if not k.startswith("utm_")]
+    return urlunsplit(parts._replace(query=urlencode(query)))
+
+
 def _abs(url: str, base: str) -> str:
     if not url:
         return ""
@@ -98,6 +105,17 @@ def parse_tineye(payload: dict) -> list[Match]:
 
 
 def tineye(q: Query, s: requests.Session, timeout: float) -> EngineResult:
+    try:
+        return _tineye(q, s, timeout)
+    except (requests.RequestException, ValueError):
+        # TinEye's API often refuses automated clients; fall back to its web page.
+        if q.url:
+            return EngineResult("tineye", "link", f"https://tineye.com/search?url={quote(q.url, safe='')}",
+                                error="API unavailable - open the link")
+        raise
+
+
+def _tineye(q: Query, s: requests.Session, timeout: float) -> EngineResult:
     api = "https://tineye.com/api/v1/result_json/?sort=score&order=desc"
     if q.data:
         r = s.post(api, files={"image": (q.filename, q.data, q.mime)}, timeout=timeout)
@@ -246,7 +264,7 @@ def parse_yandex(html: str) -> list[Match]:
         except (ValueError, TypeError):
             continue
         for site in _find_sites(state):
-            page = site.get("url", "")
+            page = strip_tracking(site.get("url", ""))
             if not page or page in seen:
                 continue
             seen.add(page)
@@ -269,7 +287,11 @@ def yandex(q: Query, s: requests.Session, timeout: float) -> EngineResult:
             "request": '{"blocks":[{"block":"b-page_type_search-by-image__link"}]}',
         }, files={"upfile": (q.filename, q.data, q.mime)}, timeout=timeout)
         r.raise_for_status()
-        link = base + "?" + r.json()["blocks"][0]["params"]["url"]
+        params = r.json()["blocks"][0]["params"]
+        if params.get("url"):            # older response format
+            link = base + "?" + params["url"]
+        else:                            # current format: only a cbir id
+            link = f"{base}?rpt=imageview&cbir_id={quote(params['cbirId'], safe='')}"
     else:
         link = f"{base}?rpt=imageview&url={quote(q.url, safe='')}"
     page = s.get(link + "&cbir_page=sites", timeout=timeout)
@@ -306,7 +328,8 @@ def baidu(q: Query, s: requests.Session, timeout: float) -> EngineResult:
     r.raise_for_status()
     url = (r.json().get("data") or {}).get("url")
     if not url:
-        return EngineResult("baidu", "error", error="no result URL")
+        return EngineResult("baidu", "link", "https://graph.baidu.com/pcpage/index?tpl_from=pc",
+                            error="upload refused - open the site and drop the image in")
     return EngineResult("baidu", "link", url)
 
 
