@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "imgsleuth"
+version = "1.0.0"
+description = "Sherlock-style reverse image search across many engines, with verified match scores"
+requires-python = ">=3.10"
+dependencies = ["requests>=2.28", "beautifulsoup4>=4.11", "pillow>=10", "numpy>=1.24"]
+
+[project.scripts]
+imgsleuth = "imgsleuth.cli:main"
+
+[tool.setuptools]
+packages = ["imgsleuth"]
