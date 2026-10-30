@@ -77,6 +77,7 @@ def parse_args(argv=None):
     p.add_argument("--csv", metavar="FILE", help="write matches as CSV")
     p.add_argument("--html", metavar="FILE", help="write a visual HTML report")
     p.add_argument("-q", "--quiet", action="store_true", help="no banner")
+    p.add_argument("--web", action="store_true", help="open the easy browser app instead")
     p.add_argument("--list-engines", action="store_true", help="list engines and exit")
     p.add_argument("--version", action="version", version=f"imgsleuth {__version__}")
     return p.parse_args(argv)
@@ -159,6 +160,10 @@ def main(argv=None) -> int:
     if args.list_engines:
         for e in ENGINES.values():
             print(f"{e.name:<12} {e.category:<8} {e.homepage:<30} {e.needs}")
+        return 0
+    if args.web:
+        from .web import serve
+        serve(base_args=args)
         return 0
     if not args.images:
         print("usage: imgsleuth IMAGE [IMAGE ...]  (see --help)")

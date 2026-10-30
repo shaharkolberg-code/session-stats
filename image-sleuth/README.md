@@ -21,7 +21,21 @@ Top matches (6 of 6):
 
 `[+]` found · `[-]` nothing · `[>]` open link in browser · `[!]` error · `[ ]` skipped
 
-## Install
+## Easiest way: the app
+
+1. Install Python 3 from [python.org](https://python.org) (on Windows, tick "Add Python to PATH").
+2. Download this folder (GitHub: **Code → Download ZIP**, then unzip).
+3. Double-click the starter for your computer:
+   - Mac: `Start Image Sleuth (Mac).command` (first time: right-click → Open)
+   - Windows: `Start Image Sleuth (Windows).bat`
+   - Linux: `Start Image Sleuth (Linux).sh`
+4. Your browser opens. Tap **choose a photo** (or paste an image link) and press **Search**.
+
+Results show as cards with a confidence score; tap one to open the page.
+To use it from your phone on the same Wi-Fi, run `imgsleuth-app --lan` and open
+`http://<your-computer's-IP>:8765` on the phone.
+
+## Install (command line)
 
 ```bash
 cd image-sleuth

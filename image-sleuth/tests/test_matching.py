@@ -63,3 +63,22 @@ def test_cli_end_to_end(tmp_path, monkeypatch, capsys):
     assert rep["matches"][0]["verdict"] == "exact"
     assert "Image Sleuth Report" in (tmp_path / "r.html").read_text()
     assert "b.com" in capsys.readouterr().out
+
+
+def test_web_app(tmp_path, monkeypatch):
+    import json
+    import threading
+    import urllib.request
+    from http.server import ThreadingHTTPServer
+
+    from imgsleuth import web
+
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), web.Handler)
+    srv.search = lambda target, trim: {"engines": [], "matches": [], "got": open(target, "rb").read().decode()}
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{srv.server_port}"
+    assert b"Image Sleuth" in urllib.request.urlopen(base + "/").read()
+    req = urllib.request.Request(base + "/search?trim=0", data=b"IMG", method="POST")
+    out = json.loads(urllib.request.urlopen(req).read())
+    assert out["got"] == "IMG" and out["query"] == "uploaded image"
+    srv.shutdown()

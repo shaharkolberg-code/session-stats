@@ -11,6 +11,7 @@ dependencies = ["requests>=2.28", "beautifulsoup4>=4.11", "pillow>=10", "numpy>=
 
 [project.scripts]
 imgsleuth = "imgsleuth.cli:main"
+imgsleuth-app = "imgsleuth.web:main"
 
 [tool.setuptools]
 packages = ["imgsleuth"]
