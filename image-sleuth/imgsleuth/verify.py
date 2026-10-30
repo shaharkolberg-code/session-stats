@@ -7,6 +7,7 @@ from urllib.parse import urlsplit
 import requests
 
 from .engines import UA, Match
+from .social import platform
 from .fingerprint import Fingerprint, fingerprint, load_image, similarity, verdict
 
 MAX_BYTES = 15 * 1024 * 1024
@@ -54,6 +55,9 @@ def verify(matches: list[Match], query: Fingerprint, timeout: float = 15,
 
 def _key(m: Match) -> str:
     u = urlsplit(m.page_url or m.image_url)
+    social = platform(m.page_url)
+    if social:  # same post on pinterest.com / de.pinterest.com / pinterest.se is one result
+        return social + u.path.rstrip("/").lower()
     return (u.netloc.lower().removeprefix("www.") + u.path.rstrip("/")).lower()
 
 
@@ -80,4 +84,6 @@ def merge(matches: list[Match]) -> list[Match]:
             for f in ("verified_score", "verdict", "image_url", "thumb_url", "width", "height"):
                 setattr(cur, f, getattr(m, f))
         cur.title = cur.title or m.title
+    for m in merged.values():
+        m.platform = platform(m.page_url) or platform(m.image_url)
     return sorted(merged.values(), key=confidence, reverse=True)

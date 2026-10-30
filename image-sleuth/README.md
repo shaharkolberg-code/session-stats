@@ -66,12 +66,25 @@ imgsleuth img.jpg -e tineye,yandex        # pick engines
 imgsleuth img.jpg -c anime                # only anime engines
 imgsleuth https://site.com/pic.jpg        # URL input (all engines work)
 imgsleuth img.jpg --host                  # temp-upload (1h) so URL-only engines work
+imgsleuth img.jpg --social-only            # only results on social media
 imgsleuth img.jpg --trim                  # strip borders from screenshots first
 imgsleuth img.jpg --dir ~/Pictures        # also find copies in a local folder (offline)
 imgsleuth img.jpg --open                  # open link-only engines in your browser
 imgsleuth img.jpg --html r.html --json r.json --csv r.csv
 imgsleuth img.jpg --proxy socks5://127.0.0.1:9050
 ```
+
+## Social media
+
+Results on Instagram, Facebook, TikTok, X, Reddit, Pinterest, YouTube,
+LinkedIn, VK, Threads, Bluesky, Tumblr, Flickr and others are labelled with
+the platform and listed first. Use `--social-only` (or the "Social media only"
+box in the app) to see just those.
+
+Social sites have no reverse image search of their own, so their posts come
+through the engines above, mainly Yandex, Google Lens and Bing. Only public
+posts those engines have indexed can be found; private accounts, stories and
+most TikTok videos can't. The tool doesn't log in to any site.
 
 ## How accuracy works
 

@@ -68,6 +68,8 @@ def parse_args(argv=None):
                    help="skip downloading candidates to check them (faster, less accurate)")
     p.add_argument("--min-score", type=float, default=0.68,
                    help="hide verified matches below this score (0-1, default 0.68)")
+    p.add_argument("-s", "--social-only", action="store_true",
+                   help="only show results on social media (Instagram, Facebook, TikTok, X, Reddit...)")
     p.add_argument("-n", "--top", type=int, default=25, help="matches to print (default 25)")
     p.add_argument("-t", "--timeout", type=float, default=25, help="per-request timeout seconds")
     p.add_argument("--proxy", default=os.environ.get("IMGSLEUTH_PROXY"),
@@ -139,6 +141,9 @@ def search_one(target: str, args, engines) -> dict:
         verify(found, qfp, timeout=min(args.timeout, 15), proxy=args.proxy)
     matches = merge(found)
     matches = [m for m in matches if m.verified_score is None or m.verified_score >= args.min_score]
+    if args.social_only:
+        matches = [m for m in matches if m.platform]
+    matches.sort(key=lambda m: not m.platform)  # social media first, keeps score order within
 
     if args.dir:
         local = search_folder(args.dir, qfp, args.min_score,
@@ -147,6 +152,9 @@ def search_one(target: str, args, engines) -> dict:
               f"{len(local)} match(es) in {args.dir}")
         matches = local + matches
 
+    social = sorted({m.platform for m in matches if m.platform})
+    print(f"{report.ICON['found' if social else 'not_found']} {'social media':<12} "
+          + (f"{sum(1 for m in matches if m.platform)} on {', '.join(social)}" if social else "none found"))
     report.print_matches(matches, args.top)
     if args.open:
         for r in results:

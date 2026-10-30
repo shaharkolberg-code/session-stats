@@ -45,7 +45,8 @@ def print_matches(matches: list[Match], limit: int) -> None:
         tag = m.verdict or "unverified"
         label = _c(VERDICT_COLOR.get(m.verdict, "37"), f"{conf:5.0%} {tag:<10}")
         size = f"{m.width}x{m.height}" if m.width else ""
-        print(f"{i:>3}. {label} {', '.join(m.engines):<18} {size:>10}  {m.page_url or m.image_url}")
+        where = _c("1;35", f"[{m.platform}] ") if m.platform else ""
+        print(f"{i:>3}. {label} {', '.join(m.engines):<18} {size:>10}  {where}{m.page_url or m.image_url}")
         if m.title:
             print(f"     {_c('90', m.title[:100])}")
 
@@ -102,7 +103,7 @@ ul.eng{list-style:none;padding:0;columns:2}</style><h1>Image Sleuth Report</h1>"
                 f'<div class=card><a href="{e(href)}" target=_blank>'
                 + (f'<img loading=lazy src="{e(thumb)}" alt="">' if thumb else "")
                 + f'</a><div class="{e(v)}">{m["confidence"]:.0%} {e(v)}</div>'
-                f'<div class=mute>{e("+".join(m["engines"]))}</div>'
+                f'<div class=mute>{"<b>" + e(m["platform"]) + "</b> · " if m["platform"] else ""}{e("+".join(m["engines"]))}</div>'
                 f'<div>{e(m["title"][:80])}</div><a class=mute href="{e(href)}" target=_blank>'
                 f'{e(href[:90])}</a></div>')
         parts.append("</div>")

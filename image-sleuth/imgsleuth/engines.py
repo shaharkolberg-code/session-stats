@@ -37,6 +37,7 @@ class Match:
     verified_score: float | None = None  # our fingerprint score, 0..1
     verdict: str = ""
     engines: list[str] = field(default_factory=list)  # all engines that found it
+    platform: str = ""          # social media platform, if the page is on one
 
 
 @dataclass

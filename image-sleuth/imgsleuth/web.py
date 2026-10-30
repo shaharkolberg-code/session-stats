@@ -36,6 +36,7 @@ button:disabled{opacity:.5;cursor:default}label.opt{color:var(--mute);font-size:
 .eng b{display:block}.eng a{color:var(--accent)}.found{color:var(--ok)}.error{color:var(--bad)}.mute{color:var(--mute)}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;word-break:break-word;font-size:14px}
+.badge{display:inline-block;background:var(--accent);color:#fff;border-radius:6px;padding:1px 7px;font-size:12px;font-weight:700;margin-bottom:3px}
 .card img{width:100%;height:180px;object-fit:contain;display:block;background:var(--line)}.card div{padding:8px 10px}
 .v-exact,.v-strong{color:var(--ok);font-weight:700}.v-possible{color:var(--mid);font-weight:700}
 .spin{display:inline-block;width:18px;height:18px;border:3px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:s 1s linear infinite;vertical-align:-4px;margin-right:8px}
@@ -44,7 +45,8 @@ button:disabled{opacity:.5;cursor:default}label.opt{color:var(--mute);font-size:
 <h1>Image Sleuth</h1><p class="sub">Find where a picture appears online. Every result is downloaded and checked against your image.</p>
 <label id="drop"><input id="file" type="file" accept="image/*" hidden><span id="dropText"><b>Tap to choose a photo</b><br><span class="mute">or drag one here</span></span></label>
 <div class="row"><input id="url" type="url" placeholder="…or paste an image link"><button id="go" disabled>Search</button></div>
-<div class="row"><label class="opt"><input id="trim" type="checkbox"> Remove borders (screenshots)</label></div>
+<div class="row"><label class="opt"><input id="trim" type="checkbox"> Remove borders (screenshots)</label>
+<label class="opt"><input id="social" type="checkbox"> Social media only</label></div>
 <div id="status"></div><div id="engines" class="engines"></div><div id="results"></div>
 </main><script>
 const $=id=>document.getElementById(id), esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -55,7 +57,7 @@ const d=$("drop");d.ondragover=e=>{e.preventDefault();d.classList.add("over")};d
 d.ondrop=e=>{e.preventDefault();d.classList.remove("over");pick(e.dataTransfer.files[0])};
 $("url").oninput=()=>{$("go").disabled=!($("url").value.trim()||file)};
 $("go").onclick=async()=>{
-  const url=$("url").value.trim(), q=new URLSearchParams({trim:$("trim").checked?1:0});
+  const url=$("url").value.trim(), q=new URLSearchParams({trim:$("trim").checked?1:0,social:$("social").checked?1:0});
   if(url)q.set("url",url);
   $("go").disabled=true;$("engines").innerHTML="";$("results").innerHTML="";
   $("status").innerHTML='<p><span class="spin"></span>Searching 9 engines and checking every result… this takes up to a minute.</p>';
@@ -65,14 +67,15 @@ $("go").onclick=async()=>{
   }catch(e){$("status").innerHTML=`<p class="error">Search failed: ${esc(e.message)}</p>`}
   $("go").disabled=false};
 function show(d){
-  const n=d.matches.length;
-  $("status").innerHTML=`<h2>${n?n+" match"+(n>1?"es":"")+" found":"No copies found online"}</h2>`;
+  const n=d.matches.length, soc=d.matches.filter(m=>m.platform), plats=[...new Set(soc.map(m=>m.platform))];
+  $("status").innerHTML=`<h2>${n?n+" match"+(n>1?"es":"")+" found":"No copies found online"}</h2>`
+    +`<p class="mute">Social media: ${soc.length?soc.length+" on "+esc(plats.join(", ")):"none found"}</p>`;
   const label={found:"found",not_found:"no matches",link:"open to check",error:"failed",skipped:"skipped"};
   $("engines").innerHTML=d.engines.map(e=>`<div class="eng"><b>${esc(e.engine)}</b><span class="${e.status}">${label[e.status]}${e.count?" ("+e.count+")":""}</span>
     ${e.search_url&&e.status!=="found"?` · <a href="${esc(e.search_url)}" target="_blank" rel="noopener">open</a>`:""}${e.error&&e.status!=="link"?`<div class="mute">${esc(e.error)}</div>`:""}</div>`).join("");
   $("results").innerHTML=n?`<div class="grid">${d.matches.map(m=>{const href=m.page_url||m.image_url,img=m.thumb_url||m.image_url,v=m.verdict||"unverified";
     return `<a class="card" href="${esc(href)}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">${img?`<img loading="lazy" src="/thumb?u=${encodeURIComponent(img)}" alt="" onerror="this.remove()">`:""}
-    <div><span class="v-${v}">${Math.round(m.confidence*100)}% ${v}</span> <span class="mute">· ${esc(m.engines.join(", "))}</span><br>${esc(m.title.slice(0,80))}<br><span class="mute">${esc(new URL(href).hostname)}</span></div></a>`}).join("")}</div>`
+    <div>${m.platform?`<span class="badge">${esc(m.platform)}</span><br>`:""}<span class="v-${v}">${Math.round(m.confidence*100)}% ${v}</span> <span class="mute">· ${esc(m.engines.join(", "))}</span><br>${esc(m.title.slice(0,80))}<br><span class="mute">${esc(new URL(href).hostname)}</span></div></a>`}).join("")}</div>`
     :`<p class="empty mute">None of the engines returned a copy of this image. Engines marked "open to check" can only be checked in your browser.</p>`}
 </script></body></html>"""
 
@@ -133,7 +136,7 @@ class Handler(BaseHTTPRequestHandler):
                 if not target:
                     target = str(Path(tmp) / "upload.jpg")
                     Path(target).write_bytes(body)
-                result = self.server.search(target, qs.get("trim") == "1")
+                result = self.server.search(target, qs.get("trim") == "1", qs.get("social") == "1")
         except SystemExit as e:  # search_one exits on undownloadable URLs
             return self._json(400, {"error": str(e)})
         except Exception as e:  # noqa: BLE001 - report any failure to the page
@@ -150,11 +153,12 @@ def serve(port: int = 8765, host: str = "127.0.0.1", open_browser: bool = True, 
 
     defaults = base_args or parse_args(["-q"])
 
-    def search(target: str, trim: bool) -> dict:
+    def search(target: str, trim: bool, social: bool = False) -> dict:
         args = parse_args(["-q"])
         for k in ("timeout", "proxy", "min_score", "engines", "exclude", "category"):
             setattr(args, k, getattr(defaults, k))
         args.trim = trim
+        args.social_only = social
         args.top = 0
         return search_one(target, args, pick_engines(args))
 

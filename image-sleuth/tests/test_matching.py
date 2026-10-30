@@ -74,7 +74,7 @@ def test_web_app(tmp_path, monkeypatch):
     from imgsleuth import web
 
     srv = ThreadingHTTPServer(("127.0.0.1", 0), web.Handler)
-    srv.search = lambda target, trim: {"engines": [], "matches": [], "got": open(target, "rb").read().decode()}
+    srv.search = lambda target, trim, social: {"engines": [], "matches": [], "got": open(target, "rb").read().decode()}
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     base = f"http://127.0.0.1:{srv.server_port}"
     assert b"Image Sleuth" in urllib.request.urlopen(base + "/").read()
@@ -82,3 +82,23 @@ def test_web_app(tmp_path, monkeypatch):
     out = json.loads(urllib.request.urlopen(req).read())
     assert out["got"] == "IMG" and out["query"] == "uploaded image"
     srv.shutdown()
+
+
+def test_social_platforms():
+    from imgsleuth.social import platform
+    assert platform("https://www.instagram.com/p/abc/") == "Instagram"
+    assert platform("https://m.facebook.com/photo?fbid=1") == "Facebook"
+    assert platform("https://i.pinimg.com/736x/a.jpg") == "Pinterest"
+    assert platform("https://old.reddit.com/r/pics/") == "Reddit"
+    assert platform("https://x.com/u/status/1") == "X"
+    assert platform("https://example.com/x.com") == ""
+    assert platform("https://notinstagram.com/") == ""
+    assert platform("https://www.pinterest.com.au/pin/1/") == "Pinterest"
+    assert platform("https://fi.pinterest.com/pin/1/") == "Pinterest"
+    assert platform("https://www.pinterest.se/pin/1/") == "Pinterest"
+    assert platform("https://facebook.example.org/") == ""
+    dup = verify.merge([Match("yandex", page_url="https://fi.pinterest.com/pin/9/"),
+                        Match("yandex", page_url="https://www.pinterest.se/pin/9/")])
+    assert len(dup) == 1
+    out = verify.merge([Match("yandex", page_url="https://vk.com/wall1"), Match("tineye", page_url="https://blog.com/a")])
+    assert {m.page_url: m.platform for m in out} == {"https://vk.com/wall1": "VK", "https://blog.com/a": ""}
