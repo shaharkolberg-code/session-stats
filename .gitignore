@@ -5,3 +5,5 @@ build-*/
 .idea/
 *.geode
 build-output/
+node_modules/
+.netlify/

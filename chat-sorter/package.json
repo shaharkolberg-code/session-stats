@@ -1,0 +1,10 @@
+{
+  "name": "chat-sorter",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Sorts exported WhatsApp chats into exams, study material, plans, to-dos and more.",
+  "dependencies": {
+    "@anthropic-ai/sdk": "1.7.0"
+  }
+}

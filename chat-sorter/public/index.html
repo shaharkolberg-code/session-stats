@@ -1,0 +1,891 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- /skeleton -->
+<title>Chat Sorter</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Rubik:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+/* Layout: a sorting desk. Category bins down the left rail, the sorted message stream on the right, a timeline as the second view. */
+:root{
+  --bg:#f2f5f3; --surface:#ffffff; --sunk:#e8eeeb; --ink:#13201b; --muted:#5a6a64; --line:#d8e0dc;
+  --accent:#0f5c4a; --accent-ink:#ffffff; --hl:#ffe9a8;
+  --c-exam:#c2410c; --c-material:#2459d6; --c-scheduled:#a8700f; --c-task:#7337e0;
+  --c-money:#15803d; --c-link:#0e7490; --c-file:#4b5a6c; --c-place:#be185d; --c-other:#6b7772;
+  --f-display:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --f-body:"Rubik", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --f-mono:"JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0d1412; --surface:#151f1c; --sunk:#111a17; --ink:#e4ede9; --muted:#93a39d; --line:#25332e;
+  --accent:#5cc3a4; --accent-ink:#06221b; --hl:#5a4a12;
+  --c-exam:#ff8f5c; --c-material:#80a8ff; --c-scheduled:#f1c04f; --c-task:#b99cff;
+  --c-money:#5fd18b; --c-link:#4fd0e6; --c-file:#a6b4c4; --c-place:#f585b8; --c-other:#9aa7a2;
+  color-scheme:dark }}
+:root[data-theme="dark"]{
+  --bg:#0d1412; --surface:#151f1c; --sunk:#111a17; --ink:#e4ede9; --muted:#93a39d; --line:#25332e;
+  --accent:#5cc3a4; --accent-ink:#06221b; --hl:#5a4a12;
+  --c-exam:#ff8f5c; --c-material:#80a8ff; --c-scheduled:#f1c04f; --c-task:#b99cff;
+  --c-money:#5fd18b; --c-link:#4fd0e6; --c-file:#a6b4c4; --c-place:#f585b8; --c-other:#9aa7a2;
+  color-scheme:dark }
+
+*{box-sizing:border-box}
+:root{color-scheme:light}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:24px 64px}
+.wrap{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:22px}
+h1,h2,h3{font-family:var(--f-display);text-wrap:balance;margin:0;letter-spacing:-.01em}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.label{font-size:11.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:500}
+
+/* header */
+.top{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:22px;align-items:stretch}
+.intro{display:flex;flex-direction:column;gap:10px;justify-content:center}
+.intro h1{font-size:clamp(30px,4.6vw,48px);font-weight:800;line-height:1.02}
+.intro h1 span{color:var(--accent)}
+.intro p{margin:0;color:var(--muted);max-width:56ch}
+.privacy{display:inline-flex;gap:8px;align-items:center;font-size:13px;color:var(--ink);background:var(--sunk);border-radius:999px;padding:5px 12px;align-self:flex-start}
+.privacy i{width:8px;height:8px;border-radius:50%;background:var(--c-money);display:block}
+
+.drop{border:1.5px dashed var(--line);border-radius:var(--r);background:var(--surface);padding:18px;display:flex;flex-direction:column;gap:12px;transition:border-color .15s,background .15s}
+.drop.over{border-color:var(--accent);background:var(--sunk)}
+.drop .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.btn{border:0;border-radius:8px;padding:9px 14px;cursor:pointer;font-weight:500;background:var(--sunk);color:var(--ink)}
+.btn.primary{background:var(--accent);color:var(--accent-ink)}
+.btn:hover{filter:brightness(1.06)}
+.drop details{font-size:13.5px;color:var(--muted)}
+.drop summary{cursor:pointer;color:var(--ink);font-weight:500}
+.drop ol{margin:6px 0 0;padding-left:20px;display:flex;flex-direction:column;gap:3px}
+.status{font-size:13px;color:var(--muted)}
+.status b{color:var(--ink)}
+
+.banner{background:var(--sunk);border-radius:8px;padding:9px 14px;font-size:13.5px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.banner b{font-weight:600}
+
+/* next up strip */
+.nextup{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px}
+.nu{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;display:flex;gap:12px;align-items:flex-start;cursor:pointer;text-align:start}
+.nu .when{flex:none;width:52px;text-align:center;border-radius:8px;padding:5px 0;background:color-mix(in srgb,var(--cc) 14%,transparent);color:var(--cc)}
+.nu .when b{display:block;font-family:var(--f-display);font-size:22px;line-height:1}
+.nu .when small{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em}
+.nu .what{min-width:0;font-size:13.5px}
+.nu .what div{overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.nu .what .meta{font-size:12px;color:var(--muted);margin-top:2px}
+
+/* action bar: AI sorting, calendar export, saved data */
+.actions{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:12px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.panel h3{font-size:16px;font-weight:700;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.panel p{margin:0;font-size:13.5px;color:var(--muted)}
+.panel .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.panel select,.panel input[type=password]{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:7px 9px;min-width:0}
+.pill{font-size:11.5px;font-weight:500;padding:2px 8px;border-radius:999px;background:var(--sunk);color:var(--muted)}
+.pill.on{background:color-mix(in srgb,var(--c-money) 15%,transparent);color:var(--c-money)}
+.pill.off{background:color-mix(in srgb,var(--c-exam) 13%,transparent);color:var(--c-exam)}
+.btn:disabled{opacity:.5;cursor:not-allowed;filter:none}
+.btn.ghost{background:none;box-shadow:inset 0 0 0 1px var(--line)}
+.bar{height:6px;border-radius:99px;background:var(--sunk);overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .3s}
+.note{font-size:13px;color:var(--muted)}
+.note.err{color:var(--c-exam)}
+.chip.ai{color:var(--accent);background:color-mix(in srgb,var(--accent) 13%,transparent)}
+.gcal{font-size:12px;color:var(--c-link);text-decoration:none;padding:2px 4px}
+.gcal:hover{text-decoration:underline}
+
+/* desk */
+.desk{display:grid;grid-template-columns:250px minmax(0,1fr);gap:22px;align-items:start}
+.rail{position:sticky;top:calc(env(safe-area-inset-top,0px) + 12px);display:flex;flex-direction:column;gap:14px}
+.bins{display:flex;flex-direction:column;gap:2px}
+.bin{display:grid;grid-template-columns:10px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 10px;border-radius:8px;border:0;background:none;cursor:pointer;text-align:start}
+.bin:hover{background:var(--sunk)}
+.bin[aria-pressed="true"]{background:var(--surface);box-shadow:0 0 0 1px var(--line)}
+.bin .dot{width:10px;height:10px;border-radius:3px;background:var(--cc)}
+.bin .nm{font-weight:500;line-height:1.2}
+.bin .nm small{display:block;font-weight:400;font-size:12px;color:var(--muted)}
+.bin .ct{font-family:var(--f-mono);font-size:12.5px;color:var(--muted)}
+.group-h{margin:8px 10px 2px}
+.tune{font-size:13px}
+.tune summary{cursor:pointer;font-weight:500;padding:4px 10px}
+.tune .tbody{display:flex;flex-direction:column;gap:8px;padding:8px 10px 0}
+.tune label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted)}
+.tune input{border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:6px 8px;font-size:13px}
+
+.main{display:flex;flex-direction:column;gap:14px;min-width:0}
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.tabs{display:inline-flex;background:var(--sunk);border-radius:9px;padding:3px}
+.tabs button{border:0;background:none;padding:7px 14px;border-radius:7px;cursor:pointer;font-weight:500;color:var(--muted)}
+.tabs button[aria-selected="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgb(0 0 0 / .08)}
+.toolbar input[type=search],.toolbar select{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 10px;min-width:0}
+.toolbar input[type=search]{flex:1 1 200px}
+.toolbar select{flex:0 1 200px}
+.chk{display:inline-flex;gap:6px;align-items:center;font-size:13.5px;color:var(--muted);cursor:pointer}
+.view-h{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.view-h h2{font-size:24px;font-weight:700}
+.view-h span{color:var(--muted);font-size:13.5px}
+
+.list{display:flex;flex-direction:column;gap:8px}
+.msg{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 12px}
+.msg.done{opacity:.55}
+.msg.done .txt{text-decoration:line-through;text-decoration-color:var(--muted)}
+.msg .head{display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:12.5px;color:var(--muted);min-width:0}
+.msg .head b{color:var(--ink);font-weight:600}
+.msg .txt{grid-column:1 / -1;white-space:pre-wrap;overflow-wrap:anywhere;unicode-bidi:plaintext}
+.msg .txt a{color:var(--c-link)}
+.msg mark{background:var(--hl);color:inherit;border-radius:3px;padding:0 2px}
+.msg .foot{grid-column:1 / -1;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:500;padding:2px 9px;border-radius:999px;color:var(--cc);background:color-mix(in srgb,var(--cc) 13%,transparent)}
+.chip.date{color:var(--ink);background:var(--sunk);font-family:var(--f-mono);font-weight:400}
+.chip.date.soon{color:var(--c-exam);background:color-mix(in srgb,var(--c-exam) 13%,transparent)}
+.donebtn{border:1px solid var(--line);background:none;border-radius:7px;padding:3px 9px;font-size:12px;cursor:pointer;color:var(--muted);align-self:start}
+.donebtn[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.more{align-self:center}
+.empty{background:var(--surface);border:1px dashed var(--line);border-radius:var(--r);padding:28px;text-align:center;color:var(--muted)}
+
+/* timeline */
+.tl{display:flex;flex-direction:column;gap:18px}
+.day{display:grid;grid-template-columns:84px minmax(0,1fr);gap:14px}
+.day .dh{position:relative;text-align:end;padding-top:10px}
+.day .dh b{display:block;font-family:var(--f-display);font-size:26px;line-height:1;font-weight:700}
+.day .dh small{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.day .dh em{display:block;font-style:normal;font-size:12px;color:var(--accent);font-weight:500;margin-top:3px}
+.day.past .dh b{color:var(--muted)}
+.sep{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:13px}
+.sep::before,.sep::after{content:"";flex:1;height:1px;background:var(--line)}
+
+@media (max-width: 860px){
+  .top,.actions{grid-template-columns:1fr}
+  .desk{grid-template-columns:1fr}
+  .rail{position:static}
+  .bins{flex-direction:row;overflow-x:auto;gap:6px;padding-bottom:4px}
+  .bin{flex:none;grid-template-columns:10px auto auto;background:var(--surface);box-shadow:0 0 0 1px var(--line)}
+  .bin[aria-pressed="true"]{box-shadow:0 0 0 2px var(--accent)}
+  .bin .nm small,.group-h{display:none}
+  .day{grid-template-columns:58px minmax(0,1fr);gap:10px}
+  .day .dh b{font-size:21px}
+}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+<!-- skeleton -->
+</head>
+<body>
+<!-- /skeleton -->
+
+<div class="wrap">
+  <header class="top">
+    <div class="intro">
+      <h1>Your chats, <span>sorted</span> into exams, plans and to-dos.</h1>
+      <p>Upload exported WhatsApp chats. Every message gets filed by what it is about: exams, study material, things you scheduled, tasks, payments, links, files and places. Dates mentioned in messages (“Thursday at 18:00”, “<bdi>מחר בשעה 10</bdi>”, “12/12”) land on a timeline.</p>
+      <span class="privacy"><i></i>Sorting runs in your browser. Messages only leave it when you press “Sort with AI”.</span>
+    </div>
+    <div class="drop" id="drop">
+      <div class="row">
+        <label class="btn primary" for="file">Choose chat exports</label>
+        <input id="file" type="file" accept=".txt,.zip,text/plain,application/zip" multiple hidden>
+        <span class="status" id="status">Drop .txt or .zip files here</span>
+      </div>
+      <details>
+        <summary>How to export a chat from WhatsApp</summary>
+        <ol>
+          <li><b>Android:</b> open the chat → ⋮ menu → More → Export chat → Without media.</li>
+          <li><b>iPhone:</b> open the chat → tap the chat name → Export Chat → Without Media.</li>
+          <li>Save the file (Files, Drive or email it to yourself), then pick it here. You can add several chats at once.</li>
+        </ol>
+      </details>
+      <div class="row">
+        <label class="chk"><span>Dates in your export look like</span>
+          <select id="order"><option value="auto">Auto-detect</option><option value="DMY">31/12/2025</option><option value="MDY">12/31/2025</option></select>
+        </label>
+      </div>
+    </div>
+  </header>
+
+  <div class="banner" id="banner"><b>Example chats.</b> These are sample messages to show how sorting works. Upload your own export to replace them.</div>
+
+  <section>
+    <div class="view-h" style="margin-bottom:10px"><h2 style="font-size:18px">Coming up</h2><span id="nuSub"></span></div>
+    <div class="nextup" id="nextup"></div>
+  </section>
+
+  <section class="actions">
+    <div class="panel" id="aiPanel">
+      <h3>Sort with AI <span class="pill" id="aiPill">Checking…</span></h3>
+      <p id="aiIntro">Keyword sorting misses messages. Claude reads each message, picks better categories and works out dates like “next Thursday”. This sends the selected messages to the Claude API through your own Netlify site.</p>
+      <div class="row">
+        <label for="aiRange" class="note">Messages from</label>
+        <select id="aiRange"><option value="30">the last 30 days</option><option value="90" selected>the last 90 days</option><option value="365">the last year</option><option value="0">all time</option></select>
+        <input type="password" id="aiPass" placeholder="App password" autocomplete="current-password" hidden>
+        <button class="btn primary" id="aiRun" disabled>Sort with AI</button>
+        <button class="btn ghost" id="aiStop" hidden>Stop</button>
+      </div>
+      <div class="bar" id="aiBar" hidden><i></i></div>
+      <div class="note" id="aiNote"></div>
+    </div>
+    <div class="panel">
+      <h3>Calendar &amp; saved chats</h3>
+      <p>Put upcoming exams, plans and deadlines into your calendar. Uploaded chats are saved in this browser, so they're still here next time.</p>
+      <div class="row">
+        <button class="btn primary" id="icsBtn">Download calendar file (.ics)</button>
+        <button class="btn ghost" id="clearBtn">Forget saved chats</button>
+      </div>
+      <div class="note" id="calNote">Each dated message also has an “Add to Google Calendar” link.</div>
+    </div>
+  </section>
+
+  <div class="desk">
+    <aside class="rail">
+      <div class="bins" id="bins"></div>
+      <details class="tune" id="tune">
+        <summary>Add your own keywords</summary>
+        <div class="tbody" id="tuneBody"></div>
+      </details>
+    </aside>
+    <main class="main">
+      <div class="toolbar">
+        <div class="tabs" role="tablist">
+          <button role="tab" id="tabList" aria-selected="true">Sorted</button>
+          <button role="tab" id="tabTl" aria-selected="false">Timeline</button>
+        </div>
+        <input type="search" id="q" placeholder="Search messages, names, courses…">
+        <select id="chat"></select>
+        <label class="chk"><input type="checkbox" id="hideDone"> Hide done</label>
+      </div>
+      <div class="view-h"><h2 id="viewTitle">All</h2><span id="viewSub"></span></div>
+      <div id="out"></div>
+    </main>
+  </div>
+</div>
+
+<script>
+(() => {
+"use strict";
+
+/* ---------- categories ---------- */
+const CATS = [
+  {id:'exam', name:'Exams', blurb:'Tests, quizzes, grades', group:'Study',
+   en:['exams?','tests?','quiz(?:zes)?','midterms?','finals?','moed','grades?','graded','study(?:ing)?','revision','retake','exam room','open book'],
+   he:['מבחן','מבחנים','בוחן','בחינה','בחינות','מועד א','מועד ב','מועד ג','ציון','ציונים','ללמוד','לומדים','חזרה למבחן','פתרון מבחן','מבחני עבר']},
+  {id:'material', name:'Study material', blurb:'Summaries, slides, homework', group:'Study',
+   en:['summary','summaries','notes','slides','lectures?','recordings?','homework','hw','assignments?','exercises?','worksheets?','chapters?','textbook','syllabus','solutions?','past papers?','moodle','tutorial','problem sets?'],
+   he:['סיכום','סיכומים','הרצאה','הרצאות','מצגת','מצגות','שיעורי בית','תרגיל','תרגילים','תרגול','מטלה','מטלות','פרק ','חומר','הקלטה','הקלטות','סילבוס','פתרונות','מודל','דף נוסחאות']},
+  {id:'scheduled', name:'Scheduled', blurb:'Meetings, plans, events', group:'Plans',
+   en:['meet(?:ing)?','appointment','call me','zoom','teams call','schedule[d]?','reminder','event','party','dinner','lunch','birthday','reservation','booked','see you','pick (?:you|me) up','let\'?s meet','tonight'],
+   he:['פגישה','נפגש','ניפגש','נפגשים','בשעה','תור ','קבענו','נקבע','לקבוע','אירוע','מסיבה','יום הולדת','ארוחת','הזמנתי','תזכורת','זום','נתראה','לאסוף']},
+  {id:'task', name:'To-dos', blurb:'Deadlines, requests, reminders', group:'Plans',
+   en:['to-?do','need to','have to','don\'?t forget','remember to','please send','can you send','deadline','due','submit(?:ted|ting)?','submission','by (?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|tomorrow|tonight)','asap'],
+   he:['צריך ל','צריכה ל','צריכים ל','לא לשכוח','אל תשכח','תזכיר','להגיש','הגשה','הגשת','דדליין','עד יום','לשלוח','תשלח','דחוף','אפשר לשלוח']},
+  {id:'money', name:'Money', blurb:'Payments, splits, prices', group:'Life',
+   en:['pay(?:ing|ment)?','paid','owe[sd]?','transfer(?:red)?','venmo','paypal','refund','split','nis','price'],
+   he:['₪','ש"ח','ש״ח','שקל','שקלים','לשלם','שילמתי','שילמת','תשלום','העברה','ביט','פייבוקס','חייב לך','חייבת לך','מחיר']},
+  {id:'link', name:'Links', blurb:'Websites, docs, videos', group:'Saved',  en:[], he:[]},
+  {id:'file', name:'Files & media', blurb:'PDFs, photos, documents', group:'Saved', en:[], he:[]},
+  {id:'place', name:'Places', blurb:'Addresses and locations', group:'Saved',
+   en:['address','location','directions'], he:['כתובת','מיקום','רחוב','ווייז','בניין','כיתה']},
+];
+const OTHER = {id:'other', name:'Everything else', blurb:'Chit-chat', group:'Saved'};
+const ALL_CATS = [...CATS, OTHER];
+const CAT = Object.fromEntries(ALL_CATS.map(c=>[c.id,c]));
+const TIMELINE_CATS = new Set(['exam','scheduled','task','material']);
+
+const store = {
+  get(k,d){ try{ const v=localStorage.getItem('chatsorter.'+k); return v?JSON.parse(v):d; }catch(e){ return d; } },
+  set(k,v){ try{ localStorage.setItem('chatsorter.'+k, JSON.stringify(v)); }catch(e){} }
+};
+let extra = store.get('extra', {});
+let done = new Set(store.get('done', []));
+let aiMap = {};   // message id -> {categories, date, time, title} from Claude
+
+/* IndexedDB keeps uploaded chats and AI results between visits (localStorage is too small for chats). */
+const idb = {
+  db: null,
+  async open(){
+    if(this.db) return this.db;
+    this.db = await new Promise((res, rej)=>{
+      const r = indexedDB.open('chat-sorter', 1);
+      r.onupgradeneeded = ()=> r.result.createObjectStore('kv');
+      r.onsuccess = ()=> res(r.result);
+      r.onerror = ()=> rej(r.error);
+    });
+    return this.db;
+  },
+  async get(k){
+    try{ const db = await this.open(); return await new Promise((res, rej)=>{ const q = db.transaction('kv').objectStore('kv').get(k); q.onsuccess = ()=>res(q.result); q.onerror = ()=>rej(q.error); }); }
+    catch(e){ return undefined; }
+  },
+  async set(k, v){
+    try{ const db = await this.open(); await new Promise((res, rej)=>{ const t = db.transaction('kv','readwrite'); t.objectStore('kv').put(v, k); t.oncomplete = res; t.onerror = ()=>rej(t.error); }); return true; }
+    catch(e){ return false; }
+  }
+};
+
+const reEsc = s => s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+let MATCHERS = [];
+function buildMatchers(){
+  MATCHERS = CATS.map(c=>{
+    const add = (extra[c.id]||[]).map(w=>w.trim()).filter(Boolean);
+    const addEn = add.filter(w=>!/[֐-׿]/.test(w)).map(reEsc);
+    const addHe = add.filter(w=>/[֐-׿]/.test(w)).map(reEsc);
+    const en = [...c.en, ...addEn], he = [...c.he, ...addHe];
+    const parts = [];
+    if(en.length) parts.push(`(?<![\\p{L}\\d])(?:${en.join('|')})(?![\\p{L}])`);
+    if(he.length) parts.push(`(?:${he.map(h=>h.replace(/ $/,'(?=\\s|$)')).join('|')})`);
+    return {id:c.id, re: parts.length? new RegExp(parts.join('|'),'giu') : null};
+  });
+}
+
+/* ---------- parsing ---------- */
+const CLEAN = s => s.replace(/[‎‏‪-‮⁦-⁩﻿]/g,'').replace(/[  ]/g,' ');
+const HEAD = /^\[?(\d{1,4})[\/.\-](\d{1,2})[\/.\-](\d{1,4}),?\s+(\d{1,2})[:.](\d{2})(?:[:.](\d{2}))?\s*([ap]\.?\s?m\.?)?\]?\s*(?:[-–]\s*)?(.*)$/i;
+const SYSTEM_RE = /end-to-end encrypted|הצפנה מקצה לקצה|created group|added|removed|left$|changed (?:the|this) group|changed their phone|joined using|יצר\/ה את הקבוצה|הוסיף|הצטרף|עזב|deleted this message|This message was deleted|ההודעה נמחקה|You deleted/i;
+const ATTACH_RE = /<attached:\s*([^>]+)>|(\S+\.\w{2,5})\s*\((?:file attached|קובץ מצורף)\)|<Media omitted>|<המדיה הושמטה>|\b[\w\-() ]+\.(?:pdf|docx?|pptx?|xlsx?)\b|(?:image|video|audio|document|sticker|GIF) omitted/i;
+const URL_RE = /\bhttps?:\/\/[^\s<>"]+|\bwww\.[^\s<>"]+/gi;
+const PLACE_URL = /maps\.google|goo\.gl\/maps|maps\.app\.goo\.gl|waze\.com|location:/i;
+
+function detectOrder(lines){
+  let firstBig=false, secondBig=false, ymd=false;
+  for(const l of lines){
+    const m = HEAD.exec(l); if(!m) continue;
+    if(m[1].length===4){ ymd=true; break; }
+    if(+m[1]>12) firstBig=true;
+    if(+m[2]>12) secondBig=true;
+  }
+  if(ymd) return 'YMD';
+  if(firstBig) return 'DMY';
+  if(secondBig) return 'MDY';
+  return 'DMY';
+}
+
+function parseChat(raw, chatName, forced){
+  const lines = CLEAN(raw).split(/\r?\n/);
+  const order = forced && forced!=='auto' ? forced : detectOrder(lines.slice(0,4000));
+  const msgs = [];
+  let cur = null;
+  for(const line of lines){
+    const m = HEAD.exec(line);
+    if(m){
+      let [ , a,b,c, hh, mi, ss, ap, rest] = m;
+      let d,mo,y;
+      if(order==='YMD'){ y=+a; mo=+b; d=+c; }
+      else if(order==='MDY'){ mo=+a; d=+b; y=+c; }
+      else { d=+a; mo=+b; y=+c; }
+      if(y<100) y+=2000;
+      let H=+hh;
+      if(ap){ const pm=/p/i.test(ap); if(pm && H<12) H+=12; if(!pm && H===12) H=0; }
+      const ts = new Date(y, mo-1, d, H, +mi, +(ss||0));
+      if(isNaN(ts)) { if(cur) cur.text += '\n'+line; continue; }
+      const sm = /^([^:]{1,80}?):\s([\s\S]*)$/.exec(rest);
+      cur = sm ? {ts, sender:sm[1].trim(), text:sm[2], chat:chatName} : {ts, sender:null, text:rest, chat:chatName};
+      msgs.push(cur);
+    } else if(cur){
+      cur.text += '\n'+line;
+    }
+  }
+  return {order, msgs: msgs.filter(x=>x.sender && x.text.trim() && !(SYSTEM_RE.test(x.text) && x.text.length<90)).map(x=>({...x, text:x.text.trim()}))};
+}
+
+/* ---------- date mentions inside messages ---------- */
+const EN_DAYS=['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
+const HE_DAYS=['ראשון','שני','שלישי','רביעי','חמישי','שישי','שבת'];
+const EN_MON = 'jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sept?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?';
+const EN_MON_IDX = s => ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'].indexOf(s.slice(0,3).toLowerCase());
+const HE_MON=['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
+const sod = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+const addDays = (d,n) => { const x=new Date(d); x.setDate(x.getDate()+n); return x; };
+
+function fixYear(dt, base){ if(dt < addDays(base,-45)) dt.setFullYear(dt.getFullYear()+1); return dt; }
+
+function extractWhen(text, ref, order){
+  const t = text.toLowerCase();
+  const base = sod(ref);
+  let day=null, m;
+  // numeric date: 12/5, 12.5.26
+  m = /(?<![\d\/.:])(\d{1,2})[\/.](\d{1,2})(?:[\/.](\d{2,4}))?(?![\d\/:]|\.\d)/.exec(t);
+  if(m){
+    const a=+m[1], b=+m[2]; let y=m[3]?+m[3]:null;
+    const d = order==='MDY'?b:a, mo = order==='MDY'?a:b;
+    if(mo>=1 && mo<=12 && d>=1 && d<=31){
+      if(y && y<100) y+=2000;
+      let dt = new Date(y||base.getFullYear(), mo-1, d);
+      if(dt.getDate()===d){ day = y? dt : fixYear(dt, base); }
+    }
+  }
+  if(!day && (m = new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(?:of\\s+)?(${EN_MON})\\b`,'i').exec(t))) day = fixYear(new Date(base.getFullYear(), EN_MON_IDX(m[2]), +m[1]), base);
+  if(!day && (m = new RegExp(`\\b(${EN_MON})\\s+(\\d{1,2})(?:st|nd|rd|th)?\\b`,'i').exec(t))) day = fixYear(new Date(base.getFullYear(), EN_MON_IDX(m[1]), +m[2]), base);
+  if(!day && (m = new RegExp(`(\\d{1,2})\\s*(?:ב|ל|-)*\\s*(${HE_MON.join('|')})`).exec(t))) day = fixYear(new Date(base.getFullYear(), HE_MON.indexOf(m[2]), +m[1]), base);
+  if(!day){
+    if(/day after tomorrow|מחרתיים/.test(t)) day = addDays(base,2);
+    else if(/\btomorrow\b|\btmrw?\b|מחר/.test(t)) day = addDays(base,1);
+    else if(/\btoday\b|\btonight\b|this evening|היום|הערב|הלילה/.test(t)) day = base;
+  }
+  if(!day){
+    let idx=-1;
+    if((m = /\b(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/.exec(t))) idx = EN_DAYS.indexOf(m[1]);
+    else if((m = /יום\s*(ראשון|שני|שלישי|רביעי|חמישי|שישי|שבת)/.exec(t))) idx = HE_DAYS.indexOf(m[1]);
+    else if(/בשבת(?!\s*שלום)/.test(t)) idx = 6;
+    if(idx>=0){ let diff = (idx - base.getDay() + 7) % 7; if(diff===0) diff=7; day = addDays(base,diff); }
+  }
+  // time
+  let H=null, M=0;
+  if((m = /\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/.exec(t))){ H=+m[1]%12 + (m[3]==='pm'?12:0); M=+(m[2]||0); }
+  else if((m = /בשעה\s*(\d{1,2})(?::(\d{2}))?/.exec(t)) || (m = /(?:\bat|@)\s*(\d{1,2})(?::(\d{2}))?\b/.exec(t))){ H=+m[1]; M=+(m[2]||0); if(H>0 && H<8) H+=12; }
+  else if((m = /(?<![\d:])(\d{1,2}):(\d{2})(?![\d:])/.exec(t))){ H=+m[1]; M=+m[2]; }
+  if(H!==null && (H>23 || M>59)) H=null;
+  if(!day && H===null) return null;
+  const dt = new Date(day||base); if(H!==null) dt.setHours(H,M,0,0);
+  return {date:dt, hasTime:H!==null, hasDay:!!day};
+}
+
+/* ---------- classify ---------- */
+function classify(msg, order){
+  const cats = new Set(), hits = [];
+  for(const mt of MATCHERS){
+    if(!mt.re) continue;
+    mt.re.lastIndex = 0;
+    let m, any=false;
+    while((m = mt.re.exec(msg.text))){ if(!m[0]){ mt.re.lastIndex++; continue; } any=true; hits.push([m.index, m.index+m[0].length]); }
+    if(any) cats.add(mt.id);
+  }
+  URL_RE.lastIndex=0;
+  if(URL_RE.test(msg.text)) cats.add('link');
+  if(PLACE_URL.test(msg.text)) cats.add('place');
+  if(ATTACH_RE.test(msg.text)){
+    cats.add('file');
+    if(/\.(pdf|docx?|pptx?|xlsx?)\b/i.test(msg.text) && (cats.has('exam')||cats.size===1)) cats.add('material');
+  }
+  let when = extractWhen(msg.text, msg.ts, order);
+  if(when && when.hasTime && when.hasDay && !cats.has('exam') && !cats.has('task')) cats.add('scheduled');
+  msg.id = msg.id || hash(msg.chat+'|'+msg.ts.getTime()+'|'+msg.sender+'|'+msg.text.slice(0,80));
+  const ai = aiMap[msg.id];
+  msg.ai = !!ai; msg.title = '';
+  if(ai){
+    // Claude's categories replace the keyword guesses; links and files are detected exactly, so keep those.
+    const exact = ['link','file','place'].filter(c=>cats.has(c) && (c!=='place' || PLACE_URL.test(msg.text)));
+    cats.clear();
+    for(const c of [...ai.categories, ...exact]) if(CAT[c]) cats.add(c);
+    if(cats.size>1) cats.delete('other');
+    when = null;
+    const dm = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ai.date||'');
+    if(dm){
+      const tm = /^(\d{1,2}):(\d{2})$/.exec(ai.time||'');
+      const dt = new Date(+dm[1], +dm[2]-1, +dm[3], tm?+tm[1]:0, tm?+tm[2]:0);
+      if(!isNaN(dt)) when = {date:dt, hasTime:!!tm, hasDay:true};
+    }
+    msg.title = ai.title || '';
+  }
+  if(!cats.size) cats.add('other');
+  msg.cats = ALL_CATS.map(c=>c.id).filter(id=>cats.has(id));
+  msg.hits = hits;
+  msg.when = (when && when.hasDay && (ai || [...cats].some(c=>TIMELINE_CATS.has(c)))) ? when : null;
+}
+function hash(s){ let h=2166136261; for(let i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,16777619);} return (h>>>0).toString(36); }
+
+/* ---------- state ---------- */
+let chats = [];     // {name, order, msgs}
+let isSample = true;
+const ui = {cat:'all', view:'list', q:'', chat:'all', hideDone:false, limit:150};
+
+function allMsgs(){ return chats.flatMap(c=>c.msgs); }
+function reclassify(){ buildMatchers(); for(const c of chats) for(const m of c.msgs) classify(m, c.order==='MDY'?'MDY':'DMY'); }
+
+/* ---------- rendering helpers ---------- */
+const esc = s => s.replace(/[&<>"']/g, ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+const $ = id => document.getElementById(id);
+const fmtDay = new Intl.DateTimeFormat(undefined,{weekday:'short', day:'numeric', month:'short'});
+const fmtTs = new Intl.DateTimeFormat(undefined,{day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit'});
+const fmtTime = new Intl.DateTimeFormat(undefined,{hour:'2-digit', minute:'2-digit'});
+
+function renderText(m){
+  const text = m.text, marks=[];
+  let u; URL_RE.lastIndex=0;
+  while((u = URL_RE.exec(text))) marks.push({s:u.index, e:u.index+u[0].length, url:u[0]});
+  const ranges = m.hits.filter(([s,e])=>!marks.some(k=>s<k.e && e>k.s)).sort((a,b)=>a[0]-b[0]);
+  const all = [...marks, ...ranges.map(([s,e])=>({s,e}))].sort((a,b)=>a.s-b.s);
+  let out='', pos=0;
+  for(const r of all){
+    if(r.s<pos) continue;
+    out += esc(text.slice(pos,r.s));
+    const seg = esc(text.slice(r.s,r.e));
+    out += r.url ? `<a href="${esc(r.url.startsWith('http')?r.url:'https://'+r.url)}" target="_blank" rel="noopener noreferrer">${seg}</a>` : `<mark>${seg}</mark>`;
+    pos = r.e;
+  }
+  return out + esc(text.slice(pos));
+}
+function relDays(d){
+  const n = Math.round((sod(d) - sod(new Date()))/86400000);
+  if(n===0) return 'Today'; if(n===1) return 'Tomorrow'; if(n===-1) return 'Yesterday';
+  return n>0 ? `In ${n} days` : `${-n} days ago`;
+}
+function whenChip(w){
+  const n = (sod(w.date)-sod(new Date()))/86400000;
+  const soon = n>=0 && n<=3;
+  return `<span class="chip date${soon?' soon':''}">${esc(fmtDay.format(w.date))}${w.hasTime?' · '+esc(fmtTime.format(w.date)):''} · ${relDays(w.date)}</span>`;
+}
+function card(m){
+  const isDone = done.has(m.id);
+  const chips = m.cats.map(id=>`<span class="chip" style="--cc:var(--c-${id})">${esc(CAT[id].name)}</span>`).join('') +
+    (m.ai ? `<span class="chip ai" title="Sorted by Claude">AI</span>` : '');
+  const gcal = m.when ? `<a class="gcal" href="${esc(gcalUrl(m))}" target="_blank" rel="noopener noreferrer">Add to Google Calendar</a>` : '';
+  return `<article class="msg${isDone?' done':''}" data-id="${m.id}">
+    <div class="head"><b dir="auto">${esc(m.sender)}</b><span dir="auto">in ${esc(m.chat)}</span><span class="mono">${esc(fmtTs.format(m.ts))}</span></div>
+    <button class="donebtn" data-done="${m.id}" aria-pressed="${isDone}">${isDone?'Done ✓':'Mark done'}</button>
+    <div class="txt" dir="auto">${renderText(m)}</div>
+    <div class="foot">${chips}${m.when?whenChip(m.when):''}${gcal}</div>
+  </article>`;
+}
+
+function filtered(){
+  const q = ui.q.trim().toLowerCase();
+  return allMsgs().filter(m =>
+    (ui.chat==='all' || m.chat===ui.chat) &&
+    (ui.cat==='all' || m.cats.includes(ui.cat)) &&
+    (!ui.hideDone || !done.has(m.id)) &&
+    (!q || m.text.toLowerCase().includes(q) || m.sender.toLowerCase().includes(q) || m.chat.toLowerCase().includes(q)));
+}
+
+function renderBins(){
+  const base = allMsgs().filter(m=>ui.chat==='all'||m.chat===ui.chat);
+  const count = id => id==='all' ? base.length : base.filter(m=>m.cats.includes(id)).length;
+  let html = `<button class="bin" data-cat="all" aria-pressed="${ui.cat==='all'}" style="--cc:var(--ink)"><span class="dot"></span><span class="nm">All messages<small>${chats.length} chat${chats.length===1?'':'s'}</small></span><span class="ct">${count('all')}</span></button>`;
+  let g=null;
+  for(const c of ALL_CATS){
+    if(c.group!==g){ g=c.group; html += `<div class="label group-h">${g}</div>`; }
+    html += `<button class="bin" data-cat="${c.id}" aria-pressed="${ui.cat===c.id}" style="--cc:var(--c-${c.id})"><span class="dot"></span><span class="nm">${esc(c.name)}<small>${esc(c.blurb)}</small></span><span class="ct">${count(c.id)}</span></button>`;
+  }
+  $('bins').innerHTML = html;
+}
+
+function renderChatSelect(){
+  const sel = $('chat');
+  sel.innerHTML = `<option value="all">All chats</option>` + chats.map(c=>`<option value="${esc(c.name)}">${esc(c.name)} (${c.msgs.length})</option>`).join('');
+  sel.value = chats.some(c=>c.name===ui.chat) ? ui.chat : 'all';
+  ui.chat = sel.value;
+}
+
+function renderNextUp(){
+  const now = sod(new Date());
+  const items = allMsgs().filter(m=>m.when && m.when.date>=now && !done.has(m.id))
+    .sort((a,b)=>a.when.date-b.when.date).slice(0,4);
+  $('nuSub').textContent = items.length ? 'The next dated items found in your chats' : '';
+  $('nextup').innerHTML = items.length ? items.map(m=>{
+    const lead = ['exam','task','scheduled','material'].find(c=>m.cats.includes(c)) || m.cats[0];
+    return `<button class="nu" data-jump="${m.id}" style="--cc:var(--c-${lead})">
+      <span class="when"><b>${m.when.date.getDate()}</b><small>${esc(new Intl.DateTimeFormat(undefined,{month:'short'}).format(m.when.date))}</small></span>
+      <span class="what"><div dir="auto">${esc(m.title || m.text.split('\n')[0])}</div><div class="meta">${esc(CAT[lead].name)} · ${esc(m.chat)} · ${relDays(m.when.date)}</div></span></button>`;
+  }).join('') : `<div class="empty" style="grid-column:1/-1;padding:16px">Nothing upcoming yet. Messages that mention a future date or time will show up here.</div>`;
+}
+
+function renderList(){
+  const items = filtered().sort((a,b)=>b.ts-a.ts);
+  $('viewSub').textContent = `${items.length} message${items.length===1?'':'s'}, newest first`;
+  if(!items.length){ $('out').innerHTML = `<div class="empty">No messages here. Try another category, or clear the search.</div>`; return; }
+  $('out').innerHTML = `<div class="list">${items.slice(0,ui.limit).map(card).join('')}</div>` +
+    (items.length>ui.limit ? `<div style="display:flex;justify-content:center;margin-top:12px"><button class="btn more" id="more">Show ${Math.min(150, items.length-ui.limit)} more of ${items.length-ui.limit}</button></div>` : '');
+}
+
+function renderTimeline(){
+  const now = sod(new Date());
+  const items = filtered().filter(m=>m.when);
+  const up = items.filter(m=>m.when.date>=now).sort((a,b)=>a.when.date-b.when.date);
+  const past = items.filter(m=>m.when.date<now).sort((a,b)=>b.when.date-a.when.date).slice(0,60);
+  $('viewSub').textContent = `${up.length} upcoming, ${items.length-up.length} earlier`;
+  if(!items.length){ $('out').innerHTML = `<div class="empty">No dated messages in this view. Exams, plans and to-dos that mention a date or a weekday appear here.</div>`; return; }
+  const groupHtml = (list, isPast) => {
+    const by = new Map();
+    for(const m of list){ const k = sod(m.when.date).getTime(); if(!by.has(k)) by.set(k,[]); by.get(k).push(m); }
+    return [...by].map(([k,ms])=>{
+      const d = new Date(+k);
+      return `<div class="day${isPast?' past':''}"><div class="dh"><b>${d.getDate()}</b><small>${esc(new Intl.DateTimeFormat(undefined,{weekday:'short',month:'short'}).format(d))}</small><em>${relDays(d)}</em></div>
+        <div class="list">${ms.sort((a,b)=>a.when.date-b.when.date).map(card).join('')}</div></div>`;
+    }).join('');
+  };
+  $('out').innerHTML = `<div class="tl">${up.length?groupHtml(up,false):'<div class="empty">Nothing upcoming in this view.</div>'}
+    ${past.length?`<div class="sep">Earlier</div>${groupHtml(past,true)}`:''}</div>`;
+}
+
+function render(){
+  renderBins(); renderNextUp();
+  $('viewTitle').textContent = (ui.cat==='all' ? 'All messages' : CAT[ui.cat].name) + (ui.view==='tl' ? ' · timeline' : '');
+  $('tabList').setAttribute('aria-selected', ui.view==='list');
+  $('tabTl').setAttribute('aria-selected', ui.view==='tl');
+  ui.view==='tl' ? renderTimeline() : renderList();
+  $('banner').hidden = !isSample;
+}
+
+function renderTune(){
+  $('tuneBody').innerHTML = `<div style="color:var(--muted);font-size:12px">Comma-separated. Course names, teachers, group nicknames. Saved in this browser.</div>` +
+    CATS.filter(c=>c.id!=='link' && c.id!=='file').map(c=>`<label for="tune-${c.id}">${esc(c.name)}<input id="tune-${c.id}" data-tune="${c.id}" dir="auto" placeholder="${c.id==='exam'?'e.g. Calculus 2, אינפי':c.id==='material'?'e.g. Prof. Levi, drive folder':''}" value="${esc((extra[c.id]||[]).join(', '))}"></label>`).join('');
+}
+
+/* ---------- events ---------- */
+document.addEventListener('click', e=>{
+  const bin = e.target.closest('[data-cat]');
+  if(bin){ ui.cat = bin.dataset.cat; ui.limit=150; render(); return; }
+  const d = e.target.closest('[data-done]');
+  if(d){ const id=d.dataset.done; done.has(id)?done.delete(id):done.add(id); store.set('done',[...done]); render(); return; }
+  if(e.target.id==='more'){ ui.limit += 150; render(); return; }
+  const j = e.target.closest('[data-jump]');
+  if(j){ ui.view='tl'; ui.cat='all'; render(); const el=document.querySelector(`.msg[data-id="${j.dataset.jump}"]`); if(el){ el.scrollIntoView({block:'center',behavior:'smooth'}); el.style.boxShadow='0 0 0 2px var(--accent)'; setTimeout(()=>el.style.boxShadow='',1800);} }
+});
+$('tabList').onclick = ()=>{ ui.view='list'; render(); };
+$('tabTl').onclick = ()=>{ ui.view='tl'; render(); };
+let qt; $('q').addEventListener('input', e=>{ clearTimeout(qt); qt=setTimeout(()=>{ ui.q=e.target.value; ui.limit=150; render(); },150); });
+$('chat').addEventListener('change', e=>{ ui.chat=e.target.value; render(); });
+$('hideDone').addEventListener('change', e=>{ ui.hideDone=e.target.checked; render(); });
+$('tuneBody').addEventListener('change', e=>{
+  const id = e.target.dataset.tune; if(!id) return;
+  extra[id] = e.target.value.split(',').map(s=>s.trim()).filter(Boolean);
+  store.set('extra', extra); reclassify(); render();
+});
+$('order').addEventListener('change', ()=>{ if(lastFiles.length) loadFiles(lastFiles); });
+
+/* ---------- file loading ---------- */
+let lastFiles = [];
+function chatNameFrom(fname){
+  return fname.replace(/^.*[\/\\]/,'').replace(/\.(txt|zip)$/i,'')
+    .replace(/^WhatsApp Chat (?:with|-)\s*/i,'').replace(/^צ'?אט WhatsApp עם\s*/,'').replace(/^_chat$/,'Chat').trim() || 'Chat';
+}
+async function readFile(f){
+  if(/\.zip$/i.test(f.name) || f.type.includes('zip')){
+    if(!window.JSZip) throw new Error('The zip reader did not load. Unzip the export and upload the .txt inside.');
+    const zip = await JSZip.loadAsync(f);
+    const txts = Object.values(zip.files).filter(z=>!z.dir && /\.txt$/i.test(z.name));
+    if(!txts.length) throw new Error(`${f.name} has no chat .txt inside.`);
+    return Promise.all(txts.map(async z=>({name: /^_?chat$/i.test(chatNameFrom(z.name)) ? chatNameFrom(f.name) : chatNameFrom(z.name), text: await z.async('string')})));
+  }
+  return [{name: chatNameFrom(f.name), text: await f.text()}];
+}
+async function loadFiles(files){
+  lastFiles = files;
+  $('status').innerHTML = 'Reading…';
+  const loaded = [], errors = [];
+  for(const f of files){
+    try{ loaded.push(...await readFile(f)); }catch(err){ errors.push(err.message||String(err)); }
+  }
+  const forced = $('order').value;
+  const parsed = loaded.map(l=>({name:l.name, raw:l.text, forced, ...parseChat(l.text, l.name, forced)})).filter(c=>c.msgs.length || (errors.push(`${c.name}: no messages recognised. Is this a WhatsApp export?`), false));
+  if(parsed.length){
+    // make names unique
+    const seen = {}; for(const c of parsed){ if(seen[c.name]){ seen[c.name]++; c.name += ` (${seen[c.name]})`; c.msgs.forEach(m=>m.chat=c.name);} else seen[c.name]=1; }
+    chats = isSample ? parsed : [...chats.filter(c=>!parsed.some(p=>p.name===c.name)), ...parsed];
+    isSample = false; ui.cat='all'; ui.chat='all'; ui.limit=150;
+    reclassify(); renderChatSelect(); render(); renderAI();
+    saveChats();
+  }
+  const n = parsed.reduce((s,c)=>s+c.msgs.length,0);
+  $('status').innerHTML = (parsed.length ? `Sorted <b>${n.toLocaleString()}</b> messages from <b>${parsed.length}</b> chat${parsed.length===1?'':'s'}.` : '') +
+    (errors.length ? ` <span style="color:var(--c-exam)">${esc(errors.join(' '))}</span>` : '') + (parsed.length? ' Add more anytime.' : '');
+}
+$('file').addEventListener('change', e=>{ if(e.target.files.length) loadFiles([...e.target.files]); e.target.value=''; });
+const drop = $('drop');
+['dragenter','dragover'].forEach(ev=>document.addEventListener(ev, e=>{ e.preventDefault(); drop.classList.add('over'); }));
+['dragleave','drop'].forEach(ev=>document.addEventListener(ev, e=>{ e.preventDefault(); if(ev==='drop' || !e.relatedTarget) drop.classList.remove('over'); }));
+document.addEventListener('drop', e=>{ const fs=[...(e.dataTransfer?.files||[])]; if(fs.length) loadFiles(fs); });
+
+/* ---------- sample chats (relative to today) ---------- */
+function sample(){
+  const today = sod(new Date());
+  const p = n=>String(n).padStart(2,'0');
+  const at = (dd,h,m)=>{ const d=addDays(today,dd); return `${p(d.getDate())}/${p(d.getMonth()+1)}/${d.getFullYear()}, ${p(h)}:${p(m)}`; };
+  const dm = n=>{ const d=addDays(today,n); return `${d.getDate()}/${d.getMonth()+1}`; };
+  const study = [
+    [-6,20,14,'Noa','Midterm for Calculus 2 is on '+dm(9)+' at 9:00, room 204. Covers chapters 3-6'],
+    [-6,20,16,'Itai','omg already?? who has a summary of chapter 4'],
+    [-6,20,31,'Maya','Calc2_ch4_summary.pdf (file attached)'],
+    [-5,11,2,'Noa','Lecture recording from today https://drive.google.com/drive/folders/calc2-recordings'],
+    [-4,18,40,'Itai','Homework 5 is due Thursday 23:59, don\'t forget to submit on moodle'],
+    [-3,21,5,'Maya','Study session at the library tomorrow at 16:00?'],
+    [-3,21,7,'Noa','in 👍'],
+    [-2,9,15,'Itai','מבחני עבר עם פתרונות של אינפי 2 מועד א 2024'],
+    [-2,9,16,'Itai','Past_exams_2024.pdf (file attached)'],
+    [-1,17,30,'Maya','Linear algebra quiz moved to '+dm(4)+' 🙄'],
+    [-1,22,10,'Noa','Grades for HW4 are up'],
+  ];
+  const family = [
+    [-5,19,2,'Mom','מחר ארוחת שישי אצל סבתא בשעה 19:30'],
+    [-4,8,40,'Dad','Dentist appointment for you on '+dm(6)+' at 4pm, I booked it'],
+    [-3,12,0,'Mom','הכתובת של הדוד: רחוב הרצל 12, רמת גן https://maps.app.goo.gl/abcd'],
+    [-2,15,22,'Dana','Who\'s paying for mom\'s birthday gift? It\'s 240₪, I\'ll send a bit link'],
+    [-1,10,12,'Dad','Don\'t forget to renew your student card'],
+    [-1,10,14,'Dana','haha good morning everyone'],
+  ];
+  const lab = [
+    [-3,14,5,'Yoav','Let\'s meet Monday at 12 to finish the lab report'],
+    [-2,16,45,'Yoav','צריך להגיש את הדוח עד יום רביעי'],
+    [-1,9,30,'Shira','Slides for the presentation: https://docs.google.com/presentation/d/lab-slides'],
+    [0,8,5,'Shira','I owe you 35 for the printing, sending now'],
+  ];
+  const toTxt = rows => rows.map(([d,h,m,who,txt])=>`${at(d,h,m)} - ${who}: ${txt}`).join('\n');
+  return [['Calculus 2 study group',toTxt(study)],['Family',toTxt(family)],['Lab partners',toTxt(lab)]]
+    .map(([name,txt])=>({name, ...parseChat(txt,name,'DMY')}));
+}
+
+/* ---------- saved chats ---------- */
+async function saveChats(){
+  if(isSample) return;
+  const ok = await idb.set('chats', chats.map(c=>({name:c.name, raw:c.raw, forced:c.forced})));
+  if(!ok) $('calNote').textContent = 'This browser would not save the chats, so you will need to upload them again next visit.';
+}
+let aiSaveT;
+function saveAI(){ clearTimeout(aiSaveT); aiSaveT = setTimeout(()=>idb.set('ai', aiMap), 400); }
+$('clearBtn').onclick = async ()=>{
+  await idb.set('chats', []); await idb.set('ai', {});
+  aiMap = {}; chats = sample(); isSample = true; ui.cat='all'; ui.chat='all';
+  reclassify(); renderChatSelect(); render(); renderAI();
+  $('calNote').textContent = 'Saved chats and AI results were removed from this browser.';
+  $('status').textContent = 'Drop .txt or .zip files here';
+};
+
+/* ---------- calendar ---------- */
+const pad2 = n=>String(n).padStart(2,'0');
+const ymd = d=>`${d.getFullYear()}${pad2(d.getMonth()+1)}${pad2(d.getDate())}`;
+const ymdhms = d=>`${ymd(d)}T${pad2(d.getHours())}${pad2(d.getMinutes())}00`;
+function eventTitle(m){
+  const lead = ['exam','task','scheduled','material'].find(c=>m.cats.includes(c));
+  const t = m.title || m.text.split('\n')[0].replace(URL_RE,'').trim();
+  const short = t.length>70 ? t.slice(0,67)+'…' : t;
+  return lead==='task' && !m.title ? `To-do: ${short}` : short;
+}
+function eventSpan(m){
+  const s = m.when.date;
+  if(m.when.hasTime){ const e = new Date(s.getTime()+3600000); return [ymdhms(s), ymdhms(e)]; }
+  return [ymd(s), ymd(addDays(s,1))];
+}
+function gcalUrl(m){
+  const [s,e] = eventSpan(m);
+  const q = new URLSearchParams({action:'TEMPLATE', text:eventTitle(m), dates:`${s}/${e}`, details:`${m.sender} in ${m.chat}:\n${m.text}`});
+  return 'https://calendar.google.com/calendar/render?'+q.toString();
+}
+function icsEscape(s){ return s.replace(/\\/g,'\\\\').replace(/;/g,'\\;').replace(/,/g,'\\,').replace(/\r?\n/g,'\\n'); }
+function icsFold(line){ const out=[]; let rest=[...line]; out.push(rest.splice(0,60).join('')); while(rest.length) out.push(' '+rest.splice(0,60).join('')); return out.join('\r\n'); }
+function buildIcs(items){
+  const now = new Date();
+  const stamp = `${now.getUTCFullYear()}${pad2(now.getUTCMonth()+1)}${pad2(now.getUTCDate())}T${pad2(now.getUTCHours())}${pad2(now.getUTCMinutes())}00Z`;
+  const L = ['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Chat Sorter//EN','CALSCALE:GREGORIAN','X-WR-CALNAME:From my chats'];
+  for(const m of items){
+    const [s,e] = eventSpan(m);
+    const val = m.when.hasTime ? '' : ';VALUE=DATE';
+    L.push('BEGIN:VEVENT', `UID:${m.id}@chat-sorter`, `DTSTAMP:${stamp}`, `DTSTART${val}:${s}`, `DTEND${val}:${e}`,
+      icsFold('SUMMARY:'+icsEscape(eventTitle(m))), icsFold('DESCRIPTION:'+icsEscape(`${m.sender} in ${m.chat}: ${m.text}`)), 'END:VEVENT');
+  }
+  L.push('END:VCALENDAR');
+  return L.join('\r\n');
+}
+$('icsBtn').onclick = ()=>{
+  const now = sod(new Date());
+  const items = filtered().filter(m=>m.when && m.when.date>=now && !done.has(m.id)).sort((a,b)=>a.when.date-b.when.date);
+  if(!items.length){ $('calNote').textContent = 'No upcoming dated items in the current view.'; return; }
+  const url = URL.createObjectURL(new Blob([buildIcs(items)], {type:'text/calendar;charset=utf-8'}));
+  const a = document.createElement('a'); a.href = url; a.download = 'chat-sorter-events.ics';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 5000);
+  $('calNote').textContent = `Calendar file with ${items.length} event${items.length===1?'':'s'} created. Open it to add them to Google, Apple or Outlook calendar. If nothing downloaded, use the “Add to Google Calendar” links instead.`;
+};
+
+/* ---------- AI sorting (calls /api/classify on the Netlify site) ---------- */
+const AI = {available:false, needsPassword:false, reason:'', running:false, stop:false};
+const BATCH = 30, PARALLEL = 3;
+function getPass(){ try{ return sessionStorage.getItem('chatsorter.pass')||''; }catch(e){ return ''; } }
+function setPass(v){ try{ sessionStorage.setItem('chatsorter.pass', v); }catch(e){} }
+function aiTodo(){
+  const days = +$('aiRange').value;
+  const cutoff = days ? Date.now()-days*86400000 : 0;
+  return allMsgs().filter(m=>m.ts.getTime()>=cutoff && !aiMap[m.id]).sort((a,b)=>a.ts-b.ts);
+}
+function renderAI(){
+  const pill = $('aiPill');
+  $('aiPass').hidden = !(AI.available && AI.needsPassword);
+  if(!$('aiPass').value) $('aiPass').value = getPass();
+  if(!AI.available){
+    pill.className = 'pill off'; pill.textContent = 'Not connected';
+    $('aiRun').disabled = true;
+    if(!AI.running) $('aiNote').textContent = AI.reason || 'AI sorting turns on when this page runs on your Netlify site with an API key set. Keyword sorting works without it.';
+    return;
+  }
+  pill.className = 'pill on'; pill.textContent = 'Connected';
+  const n = aiTodo().length, sorted = Object.keys(aiMap).length;
+  $('aiRun').disabled = AI.running || !n;
+  if(!AI.running) $('aiNote').textContent = isSample
+    ? `Upload your chats first, or try it on the ${n} example messages.`
+    : n ? `${n.toLocaleString()} message${n===1?'':'s'} in this range still to sort${sorted?`, ${sorted.toLocaleString()} already sorted by AI`:''}.` : `Everything in this range is already sorted by AI.`;
+}
+async function checkAI(){
+  try{
+    const r = await fetch('api/classify', {method:'GET', headers:{accept:'application/json'}});
+    if(r.ok && (r.headers.get('content-type')||'').includes('json')){
+      const j = await r.json(); AI.available = !!j.ok; AI.needsPassword = !!j.needsPassword; AI.reason = j.reason||'';
+    }
+  }catch(e){ /* not deployed with the function: keyword sorting only */ }
+  renderAI();
+}
+function aiStamp(d){ return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())} ${EN_DAYS[d.getDay()].slice(0,3)} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`; }
+async function sendBatch(batch){
+  const headers = {'content-type':'application/json'};
+  const pass = $('aiPass').value.trim(); if(pass) headers['x-app-password'] = pass;
+  const r = await fetch('api/classify', {method:'POST', headers, body: JSON.stringify({messages: batch.map((m,i)=>({i, chat:m.chat, sender:m.sender, ts:aiStamp(m.ts), text:m.text}))})});
+  let j = {}; try{ j = await r.json(); }catch(e){}
+  if(!r.ok){ const err = new Error(j.error || `Request failed (${r.status}).`); err.status = r.status; throw err; }
+  for(const it of j.items||[]){ const m = batch[it.i]; if(m) aiMap[m.id] = {categories:it.categories, date:it.date, time:it.time, title:it.title}; }
+}
+$('aiRun').onclick = async ()=>{
+  const todo = aiTodo(); if(!todo.length) return;
+  if(AI.needsPassword && !$('aiPass').value.trim()){ $('aiNote').className='note err'; $('aiNote').textContent = 'Enter the app password you set on Netlify.'; $('aiPass').focus(); return; }
+  setPass($('aiPass').value.trim());
+  AI.running = true; AI.stop = false;
+  $('aiStop').hidden = false; $('aiBar').hidden = false; $('aiNote').className = 'note';
+  const batches = []; for(let i=0;i<todo.length;i+=BATCH) batches.push(todo.slice(i,i+BATCH));
+  let doneN = 0, failed = 0, fatal = null, next = 0;
+  const bar = $('aiBar').firstElementChild;
+  const tick = ()=>{ bar.style.width = `${Math.round(doneN/todo.length*100)}%`; $('aiNote').textContent = `Sorting… ${doneN.toLocaleString()} of ${todo.length.toLocaleString()} messages`; };
+  tick(); renderAI();
+  const worker = async ()=>{
+    while(!AI.stop && !fatal && next < batches.length){
+      const b = batches[next++];
+      let tries = 0;
+      for(;;){
+        try{ await sendBatch(b); break; }
+        catch(err){
+          if(err.status===401 || err.status===500){ fatal = err; return; }
+          if(err.status===429 && tries++ < 3){ await new Promise(r=>setTimeout(r, 15000*tries)); continue; }
+          failed += b.length; break;
+        }
+      }
+      doneN += b.length; tick();
+      reclassify(); render(); saveAI();
+    }
+  };
+  await Promise.all(Array.from({length:PARALLEL}, worker));
+  AI.running = false; $('aiStop').hidden = true; $('aiBar').hidden = true;
+  reclassify(); render(); saveAI(); renderAI();
+  if(fatal){ $('aiNote').className='note err'; $('aiNote').textContent = fatal.message; }
+  else $('aiNote').textContent = (AI.stop ? 'Stopped. ' : 'Done. ') + (failed ? `${failed} messages could not be sorted; run it again to retry them.` : `Messages sorted by AI show an “AI” tag.`);
+};
+$('aiStop').onclick = ()=>{ AI.stop = true; $('aiNote').textContent = 'Stopping after the current batch…'; };
+$('aiRange').addEventListener('change', renderAI);
+
+/* ---------- start ---------- */
+chats = sample();
+reclassify(); renderChatSelect(); renderTune(); render(); renderAI();
+(async ()=>{
+  const [saved, savedAI] = await Promise.all([idb.get('chats'), idb.get('ai')]);
+  aiMap = savedAI || {};
+  if(saved && saved.length){
+    chats = saved.map(s=>({name:s.name, raw:s.raw, forced:s.forced, ...parseChat(s.raw, s.name, s.forced)}));
+    isSample = false;
+    $('status').innerHTML = `Restored <b>${chats.length}</b> saved chat${chats.length===1?'':'s'} from this browser. Add more anytime.`;
+  }
+  reclassify(); renderChatSelect(); render();
+  checkAI();
+})();
+})();
+</script>
+<!-- skeleton -->
+</body>
+</html>
