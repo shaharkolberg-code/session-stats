@@ -68,8 +68,14 @@ button,input,select,textarea{font:inherit;color:inherit}
 .status{font-size:13px;color:var(--muted)}
 .status b{color:var(--ink)}
 
-.banner{background:var(--sunk);border-radius:8px;padding:9px 14px;font-size:13.5px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-.banner b{font-weight:600}
+.pick{position:relative;overflow:hidden;display:inline-flex}
+.pick input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:0}
+.pick:focus-within{outline:2px solid var(--accent);outline-offset:2px}
+.paste{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+.paste textarea{width:100%;min-height:110px;resize:vertical;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 10px;font-family:var(--f-mono);font-size:12.5px}
+.paste input{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:7px 9px;min-width:0;flex:1 1 160px}
+.welcome{display:flex;flex-direction:column;gap:6px;align-items:center}
+.welcome b{color:var(--ink);font-family:var(--f-display);font-size:18px}
 
 /* next up strip */
 .nextup{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px}
@@ -188,8 +194,7 @@ button,input,select,textarea{font:inherit;color:inherit}
     </div>
     <div class="drop" id="drop">
       <div class="row">
-        <label class="btn primary" for="file">Choose chat exports</label>
-        <input id="file" type="file" accept=".txt,.zip,text/plain,application/zip" multiple hidden>
+        <span class="btn primary pick">Choose chat exports<input id="file" type="file" accept=".txt,.zip,text/plain,application/zip" multiple aria-label="Choose chat exports"></span>
         <span class="status" id="status">Drop .txt or .zip files here</span>
       </div>
       <details>
@@ -200,6 +205,13 @@ button,input,select,textarea{font:inherit;color:inherit}
           <li>Save the file (Files, Drive or email it to yourself), then pick it here. You can add several chats at once.</li>
         </ol>
       </details>
+      <details id="pasteBox">
+        <summary>Or paste the chat text</summary>
+        <div class="paste">
+          <textarea id="pasteText" dir="auto" placeholder="Open the exported .txt file, copy everything and paste it here"></textarea>
+          <div class="row"><input id="pasteName" dir="auto" placeholder="Chat name, e.g. Calculus 2 group"><button class="btn primary" id="pasteBtn">Sort pasted chat</button></div>
+        </div>
+      </details>
       <div class="row">
         <label class="chk"><span>Dates in your export look like</span>
           <select id="order"><option value="auto">Auto-detect</option><option value="DMY">31/12/2025</option><option value="MDY">12/31/2025</option></select>
@@ -207,8 +219,6 @@ button,input,select,textarea{font:inherit;color:inherit}
       </div>
     </div>
   </header>
-
-  <div class="banner" id="banner"><b>Example chats.</b> These are sample messages to show how sorting works. Upload your own export to replace them.</div>
 
   <section>
     <div class="view-h" style="margin-bottom:10px"><h2 style="font-size:18px">Coming up</h2><span id="nuSub"></span></div>
@@ -489,7 +499,7 @@ function hash(s){ let h=2166136261; for(let i=0;i<s.length;i++){ h^=s.charCodeAt
 
 /* ---------- state ---------- */
 let chats = [];     // {name, order, msgs}
-let isSample = true;
+let isSample = false; // kept for the save guard; no example chats are shown
 const ui = {cat:'all', view:'list', q:'', chat:'all', hideDone:false, limit:150};
 
 function allMsgs(){ return chats.flatMap(c=>c.msgs); }
@@ -579,12 +589,14 @@ function renderNextUp(){
     return `<button class="nu" data-jump="${m.id}" style="--cc:var(--c-${lead})">
       <span class="when"><b>${m.when.date.getDate()}</b><small>${esc(new Intl.DateTimeFormat(undefined,{month:'short'}).format(m.when.date))}</small></span>
       <span class="what"><div dir="auto">${esc(m.title || m.text.split('\n')[0])}</div><div class="meta">${esc(CAT[lead].name)} · ${esc(m.chat)} · ${relDays(m.when.date)}</div></span></button>`;
-  }).join('') : `<div class="empty" style="grid-column:1/-1;padding:16px">Nothing upcoming yet. Messages that mention a future date or time will show up here.</div>`;
+  }).join('') : `<div class="empty" style="grid-column:1/-1;padding:16px">${chats.length ? 'Nothing upcoming yet. Messages that mention a future date or time will show up here.' : 'Upcoming exams, plans and deadlines from your chats will show up here.'}</div>`;
 }
 
+const WELCOME = `<div class="empty welcome"><b>No chats yet</b><span>Export a chat from WhatsApp (Without media) and choose the file above, or paste its text. Your messages will be sorted here.</span></div>`;
 function renderList(){
   const items = filtered().sort((a,b)=>b.ts-a.ts);
   $('viewSub').textContent = `${items.length} message${items.length===1?'':'s'}, newest first`;
+  if(!chats.length){ $('out').innerHTML = WELCOME; return; }
   if(!items.length){ $('out').innerHTML = `<div class="empty">No messages here. Try another category, or clear the search.</div>`; return; }
   $('out').innerHTML = `<div class="list">${items.slice(0,ui.limit).map(card).join('')}</div>` +
     (items.length>ui.limit ? `<div style="display:flex;justify-content:center;margin-top:12px"><button class="btn more" id="more">Show ${Math.min(150, items.length-ui.limit)} more of ${items.length-ui.limit}</button></div>` : '');
@@ -596,6 +608,7 @@ function renderTimeline(){
   const up = items.filter(m=>m.when.date>=now).sort((a,b)=>a.when.date-b.when.date);
   const past = items.filter(m=>m.when.date<now).sort((a,b)=>b.when.date-a.when.date).slice(0,60);
   $('viewSub').textContent = `${up.length} upcoming, ${items.length-up.length} earlier`;
+  if(!chats.length){ $('out').innerHTML = WELCOME; return; }
   if(!items.length){ $('out').innerHTML = `<div class="empty">No dated messages in this view. Exams, plans and to-dos that mention a date or a weekday appear here.</div>`; return; }
   const groupHtml = (list, isPast) => {
     const by = new Map();
@@ -616,7 +629,6 @@ function render(){
   $('tabList').setAttribute('aria-selected', ui.view==='list');
   $('tabTl').setAttribute('aria-selected', ui.view==='tl');
   ui.view==='tl' ? renderTimeline() : renderList();
-  $('banner').hidden = !isSample;
 }
 
 function renderTune(){
@@ -669,6 +681,9 @@ async function loadFiles(files){
   for(const f of files){
     try{ loaded.push(...await readFile(f)); }catch(err){ errors.push(err.message||String(err)); }
   }
+  loadTexts(loaded, errors);
+}
+function loadTexts(loaded, errors){
   const forced = $('order').value;
   const parsed = loaded.map(l=>({name:l.name, raw:l.text, forced, ...parseChat(l.text, l.name, forced)})).filter(c=>c.msgs.length || (errors.push(`${c.name}: no messages recognised. Is this a WhatsApp export?`), false));
   if(parsed.length){
@@ -683,49 +698,18 @@ async function loadFiles(files){
   $('status').innerHTML = (parsed.length ? `Sorted <b>${n.toLocaleString()}</b> messages from <b>${parsed.length}</b> chat${parsed.length===1?'':'s'}.` : '') +
     (errors.length ? ` <span style="color:var(--c-exam)">${esc(errors.join(' '))}</span>` : '') + (parsed.length? ' Add more anytime.' : '');
 }
+$('pasteBtn').onclick = ()=>{
+  const text = $('pasteText').value;
+  if(!text.trim()){ $('status').textContent = 'Paste the chat text first.'; return; }
+  const name = $('pasteName').value.trim() || 'Pasted chat';
+  loadTexts([{name, text}], []);
+  $('pasteText').value = '';
+};
 $('file').addEventListener('change', e=>{ if(e.target.files.length) loadFiles([...e.target.files]); e.target.value=''; });
 const drop = $('drop');
 ['dragenter','dragover'].forEach(ev=>document.addEventListener(ev, e=>{ e.preventDefault(); drop.classList.add('over'); }));
 ['dragleave','drop'].forEach(ev=>document.addEventListener(ev, e=>{ e.preventDefault(); if(ev==='drop' || !e.relatedTarget) drop.classList.remove('over'); }));
 document.addEventListener('drop', e=>{ const fs=[...(e.dataTransfer?.files||[])]; if(fs.length) loadFiles(fs); });
-
-/* ---------- sample chats (relative to today) ---------- */
-function sample(){
-  const today = sod(new Date());
-  const p = n=>String(n).padStart(2,'0');
-  const at = (dd,h,m)=>{ const d=addDays(today,dd); return `${p(d.getDate())}/${p(d.getMonth()+1)}/${d.getFullYear()}, ${p(h)}:${p(m)}`; };
-  const dm = n=>{ const d=addDays(today,n); return `${d.getDate()}/${d.getMonth()+1}`; };
-  const study = [
-    [-6,20,14,'Noa','Midterm for Calculus 2 is on '+dm(9)+' at 9:00, room 204. Covers chapters 3-6'],
-    [-6,20,16,'Itai','omg already?? who has a summary of chapter 4'],
-    [-6,20,31,'Maya','Calc2_ch4_summary.pdf (file attached)'],
-    [-5,11,2,'Noa','Lecture recording from today https://drive.google.com/drive/folders/calc2-recordings'],
-    [-4,18,40,'Itai','Homework 5 is due Thursday 23:59, don\'t forget to submit on moodle'],
-    [-3,21,5,'Maya','Study session at the library tomorrow at 16:00?'],
-    [-3,21,7,'Noa','in 👍'],
-    [-2,9,15,'Itai','מבחני עבר עם פתרונות של אינפי 2 מועד א 2024'],
-    [-2,9,16,'Itai','Past_exams_2024.pdf (file attached)'],
-    [-1,17,30,'Maya','Linear algebra quiz moved to '+dm(4)+' 🙄'],
-    [-1,22,10,'Noa','Grades for HW4 are up'],
-  ];
-  const family = [
-    [-5,19,2,'Mom','מחר ארוחת שישי אצל סבתא בשעה 19:30'],
-    [-4,8,40,'Dad','Dentist appointment for you on '+dm(6)+' at 4pm, I booked it'],
-    [-3,12,0,'Mom','הכתובת של הדוד: רחוב הרצל 12, רמת גן https://maps.app.goo.gl/abcd'],
-    [-2,15,22,'Dana','Who\'s paying for mom\'s birthday gift? It\'s 240₪, I\'ll send a bit link'],
-    [-1,10,12,'Dad','Don\'t forget to renew your student card'],
-    [-1,10,14,'Dana','haha good morning everyone'],
-  ];
-  const lab = [
-    [-3,14,5,'Yoav','Let\'s meet Monday at 12 to finish the lab report'],
-    [-2,16,45,'Yoav','צריך להגיש את הדוח עד יום רביעי'],
-    [-1,9,30,'Shira','Slides for the presentation: https://docs.google.com/presentation/d/lab-slides'],
-    [0,8,5,'Shira','I owe you 35 for the printing, sending now'],
-  ];
-  const toTxt = rows => rows.map(([d,h,m,who,txt])=>`${at(d,h,m)} - ${who}: ${txt}`).join('\n');
-  return [['Calculus 2 study group',toTxt(study)],['Family',toTxt(family)],['Lab partners',toTxt(lab)]]
-    .map(([name,txt])=>({name, ...parseChat(txt,name,'DMY')}));
-}
 
 /* ---------- saved chats ---------- */
 async function saveChats(){
@@ -737,7 +721,7 @@ let aiSaveT;
 function saveAI(){ clearTimeout(aiSaveT); aiSaveT = setTimeout(()=>idb.set('ai', aiMap), 400); }
 $('clearBtn').onclick = async ()=>{
   await idb.set('chats', []); await idb.set('ai', {});
-  aiMap = {}; chats = sample(); isSample = true; ui.cat='all'; ui.chat='all';
+  aiMap = {}; chats = []; ui.cat='all'; ui.chat='all';
   reclassify(); renderChatSelect(); render(); renderAI();
   $('calNote').textContent = 'Saved chats and AI results were removed from this browser.';
   $('status').textContent = 'Drop .txt or .zip files here';
@@ -812,8 +796,8 @@ function renderAI(){
   pill.className = 'pill on'; pill.textContent = 'Connected';
   const n = aiTodo().length, sorted = Object.keys(aiMap).length;
   $('aiRun').disabled = AI.running || !n;
-  if(!AI.running) $('aiNote').textContent = isSample
-    ? `Upload your chats first, or try it on the ${n} example messages.`
+  if(!AI.running) $('aiNote').textContent = !chats.length
+    ? 'Upload a chat first, then sort it with AI.'
     : n ? `${n.toLocaleString()} message${n===1?'':'s'} in this range still to sort${sorted?`, ${sorted.toLocaleString()} already sorted by AI`:''}.` : `Everything in this range is already sorted by AI.`;
 }
 async function checkAI(){
@@ -871,7 +855,7 @@ $('aiStop').onclick = ()=>{ AI.stop = true; $('aiNote').textContent = 'Stopping 
 $('aiRange').addEventListener('change', renderAI);
 
 /* ---------- start ---------- */
-chats = sample();
+chats = [];
 reclassify(); renderChatSelect(); renderTune(); render(); renderAI();
 (async ()=>{
   const [saved, savedAI] = await Promise.all([idb.get('chats'), idb.get('ai')]);
